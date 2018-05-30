@@ -9,15 +9,23 @@
 #import "ImageUtils.h"
 #import <Accelerate/Accelerate.h>
 #import <QuickLook/QuickLook.h>
+#import "NSImage+RHResizableImageAdditions.h"
 
 #define CACHE_IMAGE(Name) NSImage* image_##Name () { \
-static NSImage *image;\
-static dispatch_once_t onceToken;\
-dispatch_once(&onceToken, ^{\
-image = [NSImage imageNamed:@""#Name]; \
-}); \
-return image; \
+return [NSImage imageNamed:@""#Name]; \
 }
+
+
+/*
+ #define CACHE_IMAGE(Name) NSImage* image_##Name () { \
+ static NSImage *image;\
+ static dispatch_once_t onceToken;\
+ dispatch_once(&onceToken, ^{\
+ image = [NSImage imageNamed:@""#Name]; \
+ }); \
+ return image; \
+ }
+ */
 
 
 CACHE_IMAGE(actions)
@@ -28,17 +36,11 @@ CACHE_IMAGE(AddSharedContact)
 CACHE_IMAGE(AddSharedContactHighlighted)
 CACHE_IMAGE(AppIcon)
 CACHE_IMAGE(AttachFile)
-CACHE_IMAGE(AttachFileHighlighted)
-CACHE_IMAGE(AttachHighlighted)
 CACHE_IMAGE(AttachLocation)
-CACHE_IMAGE(AttachLocationHighlighted)
 CACHE_IMAGE(AttachPhotoVideo)
-CACHE_IMAGE(AttachPhotoVideoHighlighted)
 CACHE_IMAGE(AttachTakePhoto)
-CACHE_IMAGE(AttachTakePhotoHighlighted)
 CACHE_IMAGE(BottomAttach)
 CACHE_IMAGE(boxBack)
-CACHE_IMAGE(CancelDownload)
 CACHE_IMAGE(chat)
 CACHE_IMAGE(chatHighlighted)
 CACHE_IMAGE(ChatMessageError)
@@ -74,9 +76,6 @@ CACHE_IMAGE(iconCancelDownload)
 CACHE_IMAGE(kick)
 CACHE_IMAGE(logo)
 CACHE_IMAGE(logoAbout)
-CACHE_IMAGE(MessageFile)
-CACHE_IMAGE(MessageFileCancel)
-CACHE_IMAGE(MessageFileDownload)
 CACHE_IMAGE(MessageMapPin)
 CACHE_IMAGE(muted)
 CACHE_IMAGE(mutedSld)
@@ -90,27 +89,20 @@ CACHE_IMAGE(secretHiglighted)
 CACHE_IMAGE(select)
 CACHE_IMAGE(selectPopup)
 CACHE_IMAGE(smile)
-CACHE_IMAGE(smileActive)
-CACHE_IMAGE(smileHover)
 CACHE_IMAGE(typingGIF)
 CACHE_IMAGE(unchecked)
 CACHE_IMAGE(uncheckedHover)
 CACHE_IMAGE(UnpinPhoto)
-CACHE_IMAGE(VideoPlay)
-CACHE_IMAGE(VoiceMessageCancel)
-CACHE_IMAGE(VoiceMessageDownload)
-CACHE_IMAGE(VoiceMessagePause)
-CACHE_IMAGE(VoiceMessagePlay)
-CACHE_IMAGE(VoiceMessageUpload)
 CACHE_IMAGE(VoiceMic)
 CACHE_IMAGE(VoiceMicHighlighted)
 CACHE_IMAGE(VoiceMicHighlighted2)
 CACHE_IMAGE(TelegramNotifications)
+CACHE_IMAGE(newConversationBroadcast)
 CACHE_IMAGE(PlayButtonBig)
 CACHE_IMAGE(ArrowWhite)
 CACHE_IMAGE(ArrowGrey)
-
-
+CACHE_IMAGE(Verify)
+CACHE_IMAGE(VerifyWhite)
 CACHE_IMAGE(DownloadIconGrey)
 CACHE_IMAGE(DownloadIconWhite)
 CACHE_IMAGE(DownloadPauseIconGrey)
@@ -191,10 +183,21 @@ CACHE_IMAGE(AudioPlayerNext);
 CACHE_IMAGE(AudioPlayerPause);
 CACHE_IMAGE(AudioPlayerClose);
 CACHE_IMAGE(AudioPlayerStop);
-CACHE_IMAGE(MiniPlayerDefaultCover);
 CACHE_IMAGE(AudioPlayerList);
 CACHE_IMAGE(AudioPlayerListActive);
 CACHE_IMAGE(MusicStandartCover);
+
+
+CACHE_IMAGE(InlineAudioPlayerBack);
+CACHE_IMAGE(InlineAudioPlayerPlay);
+CACHE_IMAGE(InlineAudioPlayerNext);
+CACHE_IMAGE(InlineAudioPlayerPause);
+
+CACHE_IMAGE(InlineAudioPlayerBackHover);
+CACHE_IMAGE(InlineAudioPlayerPlayHover);
+CACHE_IMAGE(InlineAudioPlayerNextHover);
+CACHE_IMAGE(InlineAudioPlayerPauseHover);
+
 
 CACHE_IMAGE(botCommand);
 CACHE_IMAGE(botKeyboard);
@@ -210,6 +213,69 @@ CACHE_IMAGE(SearchDownDisabled);
 CACHE_IMAGE(SearchUp);
 CACHE_IMAGE(SearchDown);
 
+
+CACHE_IMAGE(ZoomIn);
+CACHE_IMAGE(ZoomOut);
+CACHE_IMAGE(Camera);
+
+CACHE_IMAGE(ChannelMessageAsAdmin);
+CACHE_IMAGE(ChannelMessageAsAdminHighlighted);
+CACHE_IMAGE(ChannelViews);
+
+CACHE_IMAGE(PinConversation);
+CACHE_IMAGE(PinnedConversation);
+
+
+CACHE_IMAGE(ModernConversationSecretAccessoryTimer);
+
+CACHE_IMAGE(ChannelShare);
+
+CACHE_IMAGE(ModernMenuDeleteIcon);
+
+CACHE_IMAGE(EditPhotoCamera);
+CACHE_IMAGE(NoSharedLinks);
+CACHE_IMAGE(StickerSettings);
+
+CACHE_IMAGE(emojiContainer8);
+CACHE_IMAGE(emojiContainer8Highlighted);
+
+CACHE_IMAGE(CalendarIcon);
+
+CACHE_IMAGE(TempAudioPreviewPlay);
+CACHE_IMAGE(TempAudioPreviewPause);
+
+CACHE_IMAGE(ConversationInputFieldBroadcastIconActive);
+CACHE_IMAGE(ConversationInputFieldBroadcastIconInactive);
+
+CACHE_IMAGE(ModernMessageCheckmark1);
+CACHE_IMAGE(ModernMessageCheckmark2);
+
+CACHE_IMAGE(bot_inline_keyboard_url);
+
+CACHE_IMAGE(bot_inline_button_url);
+
+CACHE_IMAGE(ModernMessageLocationPin);
+
+
+CACHE_IMAGE(share_inline_bot);
+
+CACHE_IMAGE(draftIcon);
+CACHE_IMAGE(AudioPlayerVisibility);
+CACHE_IMAGE(AudioPlayerVisibilityActive);
+CACHE_IMAGE(ic_send);
+
+CACHE_IMAGE(Player_Repeat);
+CACHE_IMAGE(Player_RepeatActive);
+CACHE_IMAGE(StickerLink);
+CACHE_IMAGE(emojiGifContainer);
+CACHE_IMAGE(MusicStandartCover_Active);
+
+
+CACHE_IMAGE(pip_on);
+CACHE_IMAGE(pip_off);
+CACHE_IMAGE(Folder);
+CACHE_IMAGE(trending);
+CACHE_IMAGE(chat_pinned);
 @implementation ImageUtils
 
 NSImage *previewImageForDocument(NSString *path) {
@@ -268,7 +334,7 @@ NSImage *previewImageForDocument(NSString *path) {
 + (NSImage*)roundCorners:(NSImage *)image size:(NSSize)size
 {
     
-    if(!image)
+    if(!image || image.size.width == 0 || image.size.height == 0)
         return image;
     NSImage *existingImage = image;
     NSSize existingSize = [existingImage size];
@@ -295,6 +361,9 @@ NSImage *previewImageForDocument(NSString *path) {
 
 + (NSImage *)blurImage:(NSImage *)image blurRadius:(int)radius frameSize:(CGSize)size {
     CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)[image TIFFRepresentation], NULL);
+    
+    if(image.size.width == 0 || image.size.height == 0)
+        return image;
     
     NSImage *newImage = nil;
     if(source != NULL) {
@@ -331,6 +400,9 @@ CGImageRef CGImageCreateBlurredImage(CGImageRef inImage, NSUInteger blurRadius)
     size_t width = CGImageGetWidth(inImage);
     size_t height = CGImageGetHeight(inImage);
     size_t bytesPerRow = CGImageGetBytesPerRow(inImage);
+    
+    if(width == 0 || height == 0)
+        return NULL;
     
     //    MTLog(@"width %zu", width);
     
@@ -429,8 +501,8 @@ static int32_t get_bits(uint8_t const *bytes, unsigned int bitOffset, unsigned i
 
 
 NSImage *cropCenterWithSize(NSImage *image, NSSize cropSize) {
-    if(!image)
-        return nil;
+    if(!image || cropSize.width == 0 || cropSize.height == 0)
+        return image;
     
     NSImage *result = [[NSImage alloc] initWithSize:cropSize];
     
@@ -441,13 +513,16 @@ NSImage *cropCenterWithSize(NSImage *image, NSSize cropSize) {
     } else {
         cropedRect = NSMakeRect(0, ceil((image.size.height - image.size.width) / 2), image.size.width, image.size.width);
     }
+    if(!NSIsEmptyRect(cropedRect) && result.size.width > 0 && result.size.height > 0) {
+        [result lockFocus];
+        [image drawInRect:NSMakeRect(0, 0, result.size.width, result.size.height)
+                 fromRect:cropedRect
+                operation:NSCompositeCopy
+                 fraction:1.0];
+        [result unlockFocus];
+    }
     
-    [result lockFocus];
-    [image drawInRect:NSMakeRect(0, 0, result.size.width, result.size.height)
-             fromRect:cropedRect
-            operation:NSCompositeCopy
-             fraction:1.0];
-    [result unlockFocus];
+    
     return result;
 }
 
@@ -467,6 +542,8 @@ NSImage *imageFromFile(NSString *filePath) {
 
 NSImage *decompressedImage(NSImage *image) {
     
+    if(image.size.width == 0 || image.size.height == 0)
+        return image;
     
     CGContextRef context = CGBitmapContextCreate(NULL/*data - pass NULL to let CG allocate the memory*/,
                                                  image.size.width,
@@ -565,6 +642,24 @@ NSSize convertSize(NSSize from, NSSize maxSize)  {
         from.height = ceil(from.height * scale);
     }
     return from;
+}
+
+NSImage * (^c_processor)(NSImage *, NSSize size) =  ^NSImage* (NSImage *image,NSSize size){
+    return cropCenterWithSize(image, size);
+};
+
+
+NSImage * (^b_processor)(NSImage *, NSSize size) =  ^NSImage* (NSImage *image,NSSize size){
+    return [ImageUtils blurImage:image blurRadius:20 frameSize:size];;
+};
+
+
++(ImageProcessor)c_processor {
+    return c_processor;
+}
+
++(ImageProcessor)b_processor {
+    return b_processor;
 }
 
 NSSize resizeToMaxCorner(NSSize from, float size) {
@@ -703,6 +798,9 @@ NSSize strongsizeWithSizes(NSSize from, NSSize min, NSSize max) {
     NSImage *sourceImage = anImage;
     [sourceImage setScalesWhenResized:YES];
     
+    if(anImage.size.width == 0 || anImage.size.height == 0)
+        return anImage;
+    
     if (![sourceImage isValid]) {
         MTLog(@"Invalid Image");
     } else {
@@ -727,24 +825,30 @@ NSImageView *imageViewWithImage(NSImage *image) {
 }
 
 NSData *jpegNormalizedData(NSImage *image) {
-    NSBitmapImageRep* myBitmapImageRep;
     
-      //this will get a bitmap from the image at 1 point == 1 pixel, which is probably what you want
+    if(image.size.width > 0 && image.size.height > 0) {
+        NSBitmapImageRep* myBitmapImageRep;
+        
+        //this will get a bitmap from the image at 1 point == 1 pixel, which is probably what you want
         NSSize imageSize = [image size];
         [image lockFocus];
         myBitmapImageRep = [[NSBitmapImageRep alloc] initWithFocusedViewRect:NSMakeRect(0, 0, imageSize.width , imageSize.height)];
         [image unlockFocus];
+        
+        
+        CGFloat imageCompression = 0.5; //between 0 and 1; 1 is maximum quality, 0 is maximum compression
+        
+        // set up the options for creating a JPEG
+        NSDictionary* jpegOptions = [NSDictionary dictionaryWithObjectsAndKeys:
+                                     [NSNumber numberWithDouble:imageCompression], NSImageCompressionFactor,
+                                     [NSNumber numberWithBool:YES], NSImageProgressive,
+                                     nil];
+        
+        return[myBitmapImageRep representationUsingType:NSJPEGFileType properties:jpegOptions];
+    }
     
-
-    CGFloat imageCompression = 0.5; //between 0 and 1; 1 is maximum quality, 0 is maximum compression
-    
-    // set up the options for creating a JPEG
-    NSDictionary* jpegOptions = [NSDictionary dictionaryWithObjectsAndKeys:
-                                 [NSNumber numberWithDouble:imageCompression], NSImageCompressionFactor,
-                                 [NSNumber numberWithBool:YES], NSImageProgressive,
-                                 nil];
-    
-    return[myBitmapImageRep representationUsingType:NSJPEGFileType properties:jpegOptions];
+    return nil;
+   
 }
 
 NSData *pngNormalizedData(NSImage *image) {
@@ -769,45 +873,52 @@ NSData *pngNormalizedData(NSImage *image) {
 }
 
 
+float scaleFactor() {
+    
+    __block CGFloat scaleFactor = 1.0f;
+    
+    static ASQueue *q;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        q = [[ASQueue alloc] initWithName:"backingScaleQueue"];
+    });
+    
+    [q dispatchOnQueue:^{
+        scaleFactor = [[NSScreen mainScreen] backingScaleFactor];
+    } synchronous:YES];
+    
+    return scaleFactor;
+}
+
 NSImage *renderedImage(NSImage * oldImage, NSSize size) {
     
-    if(!oldImage)
+    NSImage *image = nil;
+    
+    if(!oldImage || oldImage.size.width == 0 || oldImage.size.height == 0)
         return oldImage;
     
-    static CALayer *layer;
-    if(!layer) {
-        layer = [CALayer layer];
-    }
-    
-    @try {
-        [CATransaction begin];
-    }
-    @catch (NSException *exception) {
-        
-    }
-    @finally {
-        
-    }
-    
-    
-    NSImage *image = nil;
     @autoreleasepool {
-        CGFloat displayScale = [[NSScreen mainScreen] backingScaleFactor];
+        
+        static CALayer *layer;
+        if(!layer) {
+            layer = [CALayer layer];
+        }
+        
+        [[NSGraphicsContext currentContext] saveGraphicsState];
+        
+        
+        CGFloat displayScale = scaleFactor();
         
         size.width *= displayScale;
         size.height *= displayScale;
+        
+        [oldImage lockFocus];
         
         CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)[oldImage TIFFRepresentation], NULL);
         
         if(source != NULL) {
             CGImageRef maskRef =  CGImageSourceCreateImageAtIndex(source, 0, NULL);
             CFRelease(source);
-            
-            [layer setContents:(__bridge id)(maskRef)];
-            [layer setFrame:NSMakeRect(0, 0, size.width, size.height)];
-            [layer setBounds:NSMakeRect(0, 0, size.width, size.height)];
-            [layer setMasksToBounds:YES];
-            
             
             CGContextRef context = CGBitmapContextCreate(NULL/*data - pass NULL to let CG allocate the memory*/,
                                                          size.width,
@@ -816,10 +927,12 @@ NSImage *renderedImage(NSImage * oldImage, NSSize size) {
                                                          0 /*bytesPerRow - CG will calculate it for you if it's allocating the data.  This might get padded out a bit for better alignment*/,
                                                          [[NSColorSpace genericRGBColorSpace] CGColorSpace],
                                                          kCGBitmapByteOrder32Host|kCGImageAlphaPremultipliedFirst);
-            [layer renderInContext:context];
             
+            
+            CGContextDrawImage(context, CGRectMake(0, 0, size.width, size.height), maskRef);
             
             CGImageRef cgImage = CGBitmapContextCreateImage(context);
+            
             
             
             CGContextRelease(context);
@@ -830,17 +943,13 @@ NSImage *renderedImage(NSImage * oldImage, NSSize size) {
             CGImageRelease(cgImage);
             CGImageRelease(maskRef);
         }
+        
+        [oldImage unlockFocus];
+        
+        
+        [[NSGraphicsContext currentContext] restoreGraphicsState];
     }
     
-    @try {
-        [CATransaction commit];
-    }
-    @catch (NSException *exception) {
-        
-    }
-    @finally {
-        
-    }
     
     
     
@@ -849,6 +958,10 @@ NSImage *renderedImage(NSImage * oldImage, NSSize size) {
 
 
 NSImage *cropImage(NSImage *image,NSSize backSize, NSPoint difference) {
+    
+    if(image.size.width == 0 || image.size.height == 0)
+        return image;
+    
     NSImage *source = image;
     NSImage *target = [[NSImage alloc]initWithSize:backSize];
     
@@ -864,13 +977,13 @@ NSImage *cropImage(NSImage *image,NSSize backSize, NSPoint difference) {
 
 NSImage *imageWithRoundCorners(NSImage *oldImage, int cornerRadius, NSSize size) {
     
-    if(!oldImage)
+    if(!oldImage || oldImage.size.width == 0 || oldImage.size.height == 0)
     return oldImage;
     
     CALayer *layer = [CALayer layer];
     NSImage *image = nil;
     @autoreleasepool {
-        CGFloat displayScale = [[NSScreen mainScreen] backingScaleFactor];
+        CGFloat displayScale = scaleFactor();
         
         size.width *= displayScale;
         size.height *= displayScale;
@@ -901,5 +1014,253 @@ NSImage *imageWithRoundCorners(NSImage *oldImage, int cornerRadius, NSSize size)
     
     return image;
 }
+
+
+NSImage *gray_resizable_placeholder() {
+    static RHResizableImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, 50, 50);
+        NSImage *img = [[NSImage alloc] initWithSize:rect.size];
+        [img lockFocus];
+        [GRAY_BORDER_COLOR set];
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:4 yRadius:4];
+        [path fill];
+        [img unlockFocus];
+        
+        image = [[RHResizableImage alloc] initWithImage:img capInsets:RHEdgeInsetsMake(5, 5, 5, 5)];
+        
+    });
+    return image;
+}
+
+NSImage *gray_circle_resizable_placeholder() {
+    static RHResizableImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, 50, 50);
+        NSImage *img = [[NSImage alloc] initWithSize:rect.size];
+        [img lockFocus];
+        [GRAY_BORDER_COLOR set];
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:25 yRadius:25];
+        [path fill];
+        [img unlockFocus];
+        
+        image = [[RHResizableImage alloc] initWithImage:img capInsets:RHEdgeInsetsMake(5, 5, 5, 5)];
+        
+    });
+    return image;
+}
+
+
+
+NSImage *blue_circle_background_image() {
+    static NSImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, 40, 40);
+        image = [[NSImage alloc] initWithSize:rect.size];
+        [image lockFocus];
+        [BLUE_COLOR set];
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:rect.size.width/2 yRadius:rect.size.height/2];
+        [path fill];
+        [image unlockFocus];
+    });
+    return image;
+}
+
+NSImage *gray_circle_background_image() {
+    static NSImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, 40, 40);
+        image = [[NSImage alloc] initWithSize:rect.size];
+        [image lockFocus];
+        [BLUE_COLOR set];
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:rect.size.width/2 yRadius:rect.size.height/2];
+        [path fill];
+        [image unlockFocus];
+    });
+    return image;
+}
+NSImage *play_image() {
+    static NSImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, image_VoicePlay().size.width + 5, image_PlayIconWhite().size.height);
+        image = [[NSImage alloc] initWithSize:rect.size];
+        [image lockFocus];
+        
+        [image_VoicePlay() drawInRect:NSMakeRect(5, 0, image_VoicePlay().size.width, image_VoicePlay().size.height) fromRect:NSZeroRect operation:NSCompositeHighlight fraction:1];
+        
+        [image unlockFocus];
+    });
+    return image;
+}
+
+NSImage *voice_play_image() {
+    static NSImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, image_VoicePlay().size.width + 3, image_VoicePlay().size.height);
+        image = [[NSImage alloc] initWithSize:rect.size];
+        [image lockFocus];
+        
+        [image_VoicePlay() drawInRect:NSMakeRect(3, 0, image_VoicePlay().size.width, image_VoicePlay().size.height) fromRect:NSZeroRect operation:NSCompositeHighlight fraction:1];
+        
+        [image unlockFocus];
+    });
+    return image;
+}
+
+NSImage *attach_downloaded_background() {
+    static NSImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, 40, 40);
+        image = [[NSImage alloc] initWithSize:rect.size];
+        [image lockFocus];
+        [BLUE_COLOR set];
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:rect.size.width/2 yRadius:rect.size.height/2];
+        [path fill];
+        
+        [image_DocumentThumbIcon() drawInRect:NSMakeRect(roundf((40 - image_DocumentThumbIcon().size.width)/2), roundf((40 - image_DocumentThumbIcon().size.height)/2), image_DocumentThumbIcon().size.width, image_DocumentThumbIcon().size.height) fromRect:NSZeroRect operation:NSCompositeHighlight fraction:1];
+        [image unlockFocus];
+    });
+    return image;
+}
+
+NSImage *white_background_color() {
+    static NSImage *image;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        image = [[NSImage alloc] initWithSize:NSMakeSize(100, 100)];
+        [image lockFocus];
+        NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(0, 0, 100, 100) xRadius:3 yRadius:3];
+        [[NSColor whiteColor] set];
+        [path fill];
+        [image unlockFocus];
+        
+        image = [[RHResizableImage alloc] initWithImage:image capInsets:RHEdgeInsetsMake(5, 5, 5, 5)];
+        
+    });
+    return image;
+}
+
+
+NSImage *video_play_image() {
+    static NSImage *image = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSRect rect = NSMakeRect(0, 0, 40, 40);
+        image = [[NSImage alloc] initWithSize:rect.size];
+        [image lockFocus];
+        [NSColorFromRGBWithAlpha(0x000000, 0.5) set];
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:rect.size.width/2 yRadius:rect.size.height/2];
+        [path fill];
+        
+        [image_PlayIconWhite() drawInRect:NSMakeRect(roundf((40 - image_PlayIconWhite().size.width)/2) + 2, roundf((40 - image_PlayIconWhite().size.height)/2) , image_PlayIconWhite().size.width, image_PlayIconWhite().size.height) fromRect:NSZeroRect operation:NSCompositeHighlight fraction:1];
+        [image unlockFocus];
+    });
+    return image;//image_VideoPlay();
+}
+
++ (NSImage *)roundedImage:(NSImage *)oldImage size:(NSSize)size {
+    
+    if(!oldImage || oldImage.size.width == 0 || oldImage.size.height == 0)
+        return oldImage;
+    
+    CALayer *layer = [CALayer layer];
+    NSImage *image = nil;
+    @autoreleasepool {
+        CGFloat displayScale = scaleFactor();
+        
+        size.width *= displayScale;
+        size.height *= displayScale;
+        
+        CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)[oldImage TIFFRepresentation], NULL);
+        
+        if(source != NULL) {
+            CGImageRef maskRef =  CGImageSourceCreateImageAtIndex(source, 0, NULL);
+            CFRelease(source);
+            
+            [layer setContents:(__bridge id)(maskRef)];
+            [layer setFrame:NSMakeRect(0, 0, size.width, size.height)];
+            [layer setBounds:NSMakeRect(0, 0, size.width, size.height)];
+            [layer setMasksToBounds:YES];
+            [layer setCornerRadius:size.width / 2];
+            
+            CGContextRef context = CGBitmapContextCreate(NULL, size.width, size.height, 8, 0, [[NSColorSpace genericRGBColorSpace] CGColorSpace], kCGBitmapByteOrder32Host|kCGImageAlphaPremultipliedFirst);
+            [layer renderInContext:context];
+            
+            CGImageRef cgImage = CGBitmapContextCreateImage(context);
+            CGContextRelease(context);
+            
+            image = [[NSImage alloc] initWithCGImage:cgImage size:NSMakeSize(size.width * 0.5, size.height * 0.5)];
+            CGImageRelease(cgImage);
+            CGImageRelease(maskRef);
+        }
+    }
+    
+    return image;
+}
+
+
+
+
++ (NSImage *) roundedImageNew:(NSImage *)oldImage size:(NSSize)size {
+    
+    if(oldImage.size.width > 0 && oldImage.size.height > 0) {
+        NSImage *result = [[NSImage alloc] initWithSize:size];
+        [result lockFocus];
+        
+        NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(0, 0, size.width, size.height)
+                                                             xRadius:size.width / 2
+                                                             yRadius:size.height / 2];
+        [path addClip];
+        
+        [oldImage drawInRect:NSMakeRect(0, 0, size.width, size.height)
+                    fromRect:NSZeroRect
+                   operation:NSCompositeSourceOver
+                    fraction:1.0];
+        
+        [result unlockFocus];
+        return result;
+    }
+    
+    return oldImage;
+   
+}
+
+static void addRoundedRectToPath(CGContextRef context, CGRect rect, float ovalWidth, float ovalHeight)
+{
+    float fw, fh;
+    if (ovalWidth == 0 || ovalHeight == 0)
+    {
+        CGContextAddRect(context, rect);
+        return;
+    }
+    CGContextSaveGState(context);
+    CGContextTranslateCTM (context, CGRectGetMinX(rect), CGRectGetMinY(rect));
+    CGContextScaleCTM (context, ovalWidth, ovalHeight);
+    fw = CGRectGetWidth (rect) / ovalWidth;
+    fh = CGRectGetHeight (rect) / ovalHeight;
+    CGContextMoveToPoint(context, fw, fh/2);
+    CGContextAddArcToPoint(context, fw, fh, fw/2, fh, 1);
+    CGContextAddArcToPoint(context, 0, fh, 0, fh/2, 1);
+    CGContextAddArcToPoint(context, 0, 0, fw/2, 0, 1);
+    CGContextAddArcToPoint(context, fw, 0, fw, fh/2, 1);
+    CGContextClosePath(context);
+    CGContextRestoreGState(context);
+}
+
+
+
 
 @end

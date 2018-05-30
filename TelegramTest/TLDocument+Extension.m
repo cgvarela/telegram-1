@@ -12,7 +12,7 @@
 
 -(NSString *)file_name {
     
-    __block NSString *fileName = @"";
+    __block NSString *fileName = @"Unnamed.file";
     
     [self.attributes enumerateObjectsUsingBlock:^(TLDocumentAttribute *obj, NSUInteger idx, BOOL *stop) {
         
@@ -38,7 +38,15 @@
     return 0;
 }
 
+-(NSString *)path_with_cache {
+    TL_localMessage *fake = [[TL_localMessage alloc] init];
+    fake.media = [TL_messageMediaDocument createWithDocument:self caption:@""];
+    return mediaFilePath(fake);
+}
 
+- (BOOL)isset {
+    return isPathExists(self.path_with_cache) && [FileUtils checkNormalizedSize:self.path_with_cache checksize:[self size]];
+}
 
 -(TLDocumentAttribute *)attributeWithClass:(Class)className {
     
@@ -57,20 +65,49 @@
     
 }
 
--(BOOL)isSticker {
-    __block BOOL isSticker = NO;
+-(NSArray *)serverAttributes {
     
-    [self.attributes enumerateObjectsUsingBlock:^(TLDocumentAttribute *obj, NSUInteger idx, BOOL *stop) {
-        
-        if([obj isKindOfClass:[TL_documentAttributeSticker class]]) {
-            isSticker = YES;
-            *stop = YES;
-        }
-        
-    }];
+    static NSArray *localAttributes;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        localAttributes = @[NSStringFromClass([TL_documentAttributeLocalFile class])];
+    });
     
-    return isSticker;
+    return [self.attributes filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id  _Nonnull evaluatedObject, NSDictionary<NSString *,id> * _Nullable bindings) {
+        
+        return [localAttributes indexOfObject:NSStringFromClass([evaluatedObject class])] == NSNotFound;
+        
+    }]];
 }
+
+-(BOOL)isSticker {
+    return self.stickerAttr != nil ;
+}
+
+-(BOOL)isVideo {
+    return [self.mime_type hasPrefix:@"video"] && [self attributeWithClass:[TL_documentAttributeVideo class]] != nil && [self attributeWithClass:[TL_documentAttributeAnimated class]] == nil;
+}
+
+-(BOOL)isGif {
+    return [self.mime_type hasPrefix:@"video/mp4"] && [self attributeWithClass:[TL_documentAttributeVideo class]] != nil && [self attributeWithClass:[TL_documentAttributeAnimated class]] != nil;
+}
+-(BOOL)isAudio {
+    return ([self.mime_type isEqualToString:@"audio/mpeg"] && [self attributeWithClass:[TL_documentAttributeAudio class]] == nil) || ([self attributeWithClass:[TL_documentAttributeAudio class]] != nil && ![self attributeWithClass:[TL_documentAttributeAudio class]].isVoice);
+}
+
+-(BOOL)isVoice {
+    return ([self.mime_type isEqualToString:@"audio/ogg"] && [self attributeWithClass:[TL_documentAttributeAudio class]] == nil) || ([self attributeWithClass:[TL_documentAttributeAudio class]] != nil && [self attributeWithClass:[TL_documentAttributeAudio class]].isVoice);
+}
+
+-(TL_documentAttributeAudio *)audioAttr {
+    return (TL_documentAttributeAudio *) [self attributeWithClass:[TL_documentAttributeAudio class]];
+}
+
+-(TL_documentAttributeSticker *)stickerAttr {
+    return (TL_documentAttributeSticker *) [self attributeWithClass:[TL_documentAttributeSticker class]] != nil ? (TL_documentAttributeSticker *) [self attributeWithClass:[TL_documentAttributeSticker class]] : (TL_documentAttributeSticker *) [self attributeWithClass:[TL_documentAttributeSticker_old55 class]];
+}
+
+
 -(NSSize)imageSize {
     __block NSSize size = NSZeroSize;
     

@@ -10,8 +10,7 @@
 #import "UserInfoShortTextEditView.h"
 #import "TGTimer.h"
 @interface PhoneChangeConfirmController ()<NSTextFieldDelegate>
-@property (nonatomic,strong) TMTextField *centerTextField;
-@property (nonatomic,strong) TL_account_sentChangePhoneCode *params;
+@property (nonatomic,strong) TL_auth_sentCode *params;
 @property (nonatomic,strong) UserInfoShortTextEditView *smsCodeView;
 @property (nonatomic,strong) TGTimer *callTimer;
 @property (nonatomic,strong) TMTextField *callTextField;
@@ -32,9 +31,9 @@
     self.smsCodeView = [[UserInfoShortTextEditView alloc] initWithFrame:NSMakeRect(100, 30, self.view.frame.size.width-200, 35)];
     
     
-    self.smsCodeView.textView.font = [NSFont fontWithName:@"HelveticaNeue" size:13];
+    self.smsCodeView.textView.font = TGSystemFont(13);
     
-    NSAttributedString *smsCodePlaceholder = [[NSAttributedString alloc] initWithString:NSLocalizedString(@"PhoneChangeController.SmsPlaceholder", nil) attributes:@{NSFontAttributeName:[NSFont fontWithName:@"HelveticaNeue" size:13], NSForegroundColorAttributeName:GRAY_TEXT_COLOR}];
+    NSAttributedString *smsCodePlaceholder = [[NSAttributedString alloc] initWithString:NSLocalizedString(@"PhoneChangeController.SmsPlaceholder", nil) attributes:@{NSFontAttributeName:TGSystemFont(13), NSForegroundColorAttributeName:GRAY_TEXT_COLOR}];
     
     
     [self.smsCodeView.textView.cell setPlaceholderAttributedString:smsCodePlaceholder];
@@ -108,7 +107,7 @@
     
 }
 
-- (void)setChangeParams:(TL_account_sentChangePhoneCode *)params phone:(NSString *)phone {
+- (void)setChangeParams:(TL_auth_sentCode *)params phone:(NSString *)phone {
     if(!self.view)
         [self loadView];
     
@@ -143,16 +142,16 @@
     
     self.callTimer = [[TGTimer alloc] initWithTimeout:1.0 repeat:YES completion:^{
         
-        --self.params.send_call_timeout;
+        --self.params.timeout;
         
-        if(self.params.send_call_timeout == 0) {
+        if(self.params.timeout == 0) {
            [self.callTimer invalidate];
             self.callTimer = nil;
         }
         
         [self updateCallTime];
         
-    } queue:[ASQueue mainQueue].nativeQueue];
+    } queue:[ASQueue mainQueue]._dispatch_queue];
     
     [self.callTimer start];
     
@@ -161,8 +160,8 @@
 
 -(void)updateCallTime {
     
-    if(self.params.send_call_timeout > 0) {
-         [self.callTextField setStringValue:[NSString stringWithFormat:NSLocalizedString(@"PhoneChangeConfirmController.sendCall", nil), [NSString durationTransformedValue:self.params.send_call_timeout]]];
+    if(self.params.timeout > 0) {
+         [self.callTextField setStringValue:[NSString stringWithFormat:NSLocalizedString(@"PhoneChangeConfirmController.sendCall", nil), [NSString durationTransformedValue:self.params.timeout]]];
     } else {
         [self.callTextField setStringValue:NSLocalizedString(@"PhoneChangeConfirmController.phoneDialed", nil)];
     }

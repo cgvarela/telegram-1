@@ -45,6 +45,14 @@ static ASQueue *queue;
     });
 }
 
+-(ASQueue *)queue {
+    return queue;
+}
+
+-(BOOL)isDone {
+    return isPathExists(self.generatedPath);
+}
+
 
 -(void)prepareImage:(NSString *)file orData:(NSData *)data {
     
@@ -66,13 +74,10 @@ static ASQueue *queue;
             
             
             NSData *imageData = jpegNormalizedData(originImage);
-            
+                        
             _generatedPath = exportPath(_unique_id, @"jpg");
             
             [imageData writeToFile:_generatedPath atomically:YES];
-            
-            
-            
             
             _thumb = cropCenterWithSize(originImage, NSMakeSize(70, 70));
             
@@ -81,13 +86,16 @@ static ASQueue *queue;
             [TGCache cacheImage:_thumb forKey:[NSString stringWithFormat:@"_attach_thumb:%lu",_unique_id] groups:@[THUMBCACHE]];
             
             [ASQueue dispatchOnMainQueue:^{
+                
+                
+                [self startUploader];
+                
                 [_delegate didSuccessGeneratedThumb:_thumb];
                 
                 [_delegate didSuccessGenerateAttach];
             }];
             
             
-            [self startUploader];
            
         } else {
             [ASQueue dispatchOnMainQueue:^{
@@ -117,7 +125,7 @@ static ASQueue *queue;
             
             [_uploader setUploadComplete:^(UploadOperation *uploader, id input) {
                 
-                _uploader = nil;
+                weakSelf.uploader = nil;
                 
                 dispatch_after_seconds(0.3, ^{
                     [weakSelf.delegate didEndUploading:uploader];
@@ -170,7 +178,7 @@ static ASQueue *queue;
     
     _imageSize = image.size;
     
-    NSSize maxSize = strongsize(_imageSize, 250);
+    NSSize maxSize = strongsize(_imageSize, MIN_IMG_SIZE.width);
     
     
     if(_imageSize.width > MIN_IMG_SIZE.width && _imageSize.height > MIN_IMG_SIZE.height && maxSize.width == MIN_IMG_SIZE.width && maxSize.height == MIN_IMG_SIZE.height) {
@@ -242,6 +250,7 @@ static ASQueue *queue;
 -(void)dealloc {
     [_uploader cancel];
     _uploader = nil;
+    [[NSFileManager defaultManager] removeItemAtPath:_generatedPath error:nil];
 }
 
 -(BOOL)isEqualTo:(TGAttachObject *)object {
@@ -250,6 +259,11 @@ static ASQueue *queue;
 
 -(Class)senderClass {
     return [ImageAttachSenderItem class];
+}
+
+-(void)cancel {
+    [_uploader cancel];
+    _uploader = nil;
 }
 
 -(void)save {

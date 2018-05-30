@@ -7,8 +7,6 @@
 //
 
 #import "LeftViewController.h"
-#import "SearchViewController.h"
-#import "NewConversationViewController.h"
 #import "RBLPopover.h"
 #import "TMTabViewController.h"
 #import "AccountSettingsViewController.h"
@@ -79,7 +77,6 @@
 
 @interface LeftViewController ()<TMTabViewDelegate>
 
-@property (nonatomic, strong) SearchViewController *searchViewController;
 @property (nonatomic, strong) AccountSettingsViewController *settingsViewController;
 @property (nonatomic, strong) BTRButton *topButton;
 @property (nonatomic, strong) TMSimpleTabViewController *tabViewController;
@@ -95,7 +92,7 @@
 @implementation LeftViewController
 
 
-static const int bottomOffset = 58;
+static const int bottomOffset = 50;
 
 - (void)loadView {
     [super loadView];
@@ -232,9 +229,34 @@ static const int bottomOffset = 58;
     [self.tabController setUnreadCount:count];
 }
 
+static TMViewController *changedController;
+
 -(void)tabItemDidChanged:(TMTabItem *)item index:(NSUInteger)index {
+    
+    if([Telegram mainViewController].isMinimisze && index != 1)
+        return;
+    
     [self.tabViewController showControllerByIndex:index];
     
+    if(![Telegram isSingleLayout]) {
+        if([self.tabViewController.currentController isKindOfClass:[AccountSettingsViewController class]]) {
+            
+            changedController = [Telegram rightViewController].navigationViewController.currentController;
+            
+            [[Telegram rightViewController] showGeneralSettings];
+        } else if([[Telegram rightViewController].navigationViewController.viewControllerStack indexOfObject:changedController] != NSNotFound) {
+            
+            NSUInteger idx = [[Telegram rightViewController].navigationViewController.viewControllerStack indexOfObject:changedController];
+            
+            [[Telegram rightViewController].navigationViewController.viewControllerStack removeObjectsInRange:NSMakeRange(idx, [Telegram rightViewController].navigationViewController.viewControllerStack.count - idx)];
+            
+            [[Telegram rightViewController].navigationViewController pushViewController:changedController animated:NO];
+            changedController = nil;
+            
+        }
+    }
+    
+   
     
     [self setCenterBarViewText:item.title];
 }
@@ -251,7 +273,6 @@ static const int bottomOffset = 58;
     [self.tabController setFrameSize:NSMakeSize(NSWidth(self.view.frame), NSHeight(self.tabController.frame))];
     
     
-    [self.conversationsViewController viewWillAppear:NO];
 //    
 //    self.tabController.selectedIndex = self.tabController.selectedIndex;
 }
@@ -266,11 +287,15 @@ static const int bottomOffset = 58;
 }
 
 - (BOOL)isSearchActive {
-    return self.tabViewController.currentController == self.searchViewController;
+    return NO;
 }
 
 -(BOOL)becomeFirstResponder {
     return [[self currentTabController] becomeFirstResponder];
+}
+
+-(BOOL)resignFirstResponder {
+    return [[self currentTabController] resignFirstResponder];
 }
 
 - (NSResponder *)firstResponder {

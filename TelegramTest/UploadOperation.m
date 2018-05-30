@@ -12,8 +12,11 @@
 #import "QueueManager.h"
 #import "NSMutableData+Extension.h"
 #import "TGTimer.h"
-#import "Crypto.h"
+#import <MtProtoKitMac/MtProtoKitMac.h>
+#import <openssl/md5.h>
+#import <CommonCrypto/CommonCrypto.h>
 #define CONCURENT 3
+#define MD5(data, len, md)      CC_MD5(data, len, md)
 
 @interface UploadOperation () {
     int fingerprint;
@@ -49,13 +52,7 @@
     return self;
 }
 
-- (BOOL)isConcurrent {
-    return YES;
-}
 
-- (BOOL)isFinished {
-    return self.uploadState == UploadFinished || self.uploadState == UploadError || self.uploadState == UploadCancelled;
-}
 
 -(void)setUploadCancelled:(void (^)(UploadOperation *))uploadCancelled {
     
@@ -82,6 +79,13 @@
     }];
 }
 
+- (BOOL)isConcurrent {
+    return YES;
+}
+
+- (BOOL)isFinished {
+    return self.uploadState == UploadFinished || self.uploadState == UploadError || self.uploadState == UploadCancelled;
+}
 
 - (BOOL)isExecuting {
     return self.uploadState == UploadExecuting;
@@ -152,7 +156,7 @@
     self.total_size = (int) (self.fileData ? self.fileData.length : fileSize(self.filePath));
     
     
-    if(self.filePath) {
+    if(self.filePath && self.total_size < 10*1024*1024) {
         self.fileMD5Hash = fileMD5(self.filePath);
     }
     
@@ -165,9 +169,26 @@
     self.aes_key = key;
     self.aes_iv = [iv mutableCopy];
     
-    NSData *digest = [Crypto md5:[self.aes_key dataWithData:self.aes_iv]];
     
-    NSData *fingerdata = [Crypto xorAB:[digest subdataWithRange:NSMakeRange(0, 4)] b:[digest subdataWithRange:NSMakeRange(4, 4)]];
+    NSData *k = [self.aes_key dataWithData:self.aes_iv];
+    
+    unsigned char d[MD5_DIGEST_LENGTH];
+    
+    MD5([k bytes], (int)[k length], d);
+    
+    NSData *digest = [NSData dataWithBytes:&d length:MD5_DIGEST_LENGTH];
+    
+  
+    
+    NSMutableData *fingerdata = [[digest subdataWithRange:NSMakeRange(0, 4)] mutableCopy];
+    
+    NSData *b = [digest subdataWithRange:NSMakeRange(4, 4)];
+    
+    for (int i = 0; i < (int)fingerdata.length && i < (int)b.length; i++)
+    {
+        ((uint8_t *)fingerdata.mutableBytes)[i] ^= ((uint8_t *)b.bytes)[i];
+    }
+    
     [fingerdata getBytes:&self->fingerprint];
     
     self.isEncrypted = YES;
@@ -181,7 +202,7 @@
         
         id manager = [NSClassFromString(@"Storage") performSelector:@selector(manager)];
         
-        id file = [manager performSelector:@selector(fileInfoByPathHash:) withObject:self.fileMD5Hash];
+        id file = _uploadType == UploadImageType || UploadDocumentType ? [manager performSelector:@selector(fileInfoByPathHash:) withObject:self.fileMD5Hash] : nil;
         
         if(!file && _uploaderRequestFileHash) {
             file = _uploaderRequestFileHash(self);
@@ -217,7 +238,7 @@
         self.total_parts = ceil(self.total_size / 1.0 / self.part_size);
     }
     
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         if(self.uploadStarted)
             self.uploadStarted(self, self.fileData);
         
@@ -226,7 +247,7 @@
             if(self.uploadTypingNeed && self.uploadState == UploadExecuting)
                 self.uploadTypingNeed(self);
             
-        } queue:[ASQueue globalQueue].nativeQueue];
+        } queue:[ASQueue globalQueue]._dispatch_queue];
         
         [self.typingTimer start];
     }];
@@ -252,10 +273,6 @@
         }
     }];
     
-    _semaphore = dispatch_semaphore_create(0);
-    dispatch_semaphore_wait(_semaphore, DISPATCH_TIME_FOREVER);
-    MTLog(@"end");
-    dispatch_semaphore_signal(_semaphore);
 }
 
 - (NSData *)readDataFromPosition:(NSUInteger)position length:(NSUInteger)length {
@@ -293,13 +310,16 @@
     }
     [self.blocksRequests removeAllObjects];
     
-    if(_semaphore)
-        dispatch_semaphore_signal(_semaphore);
 }
 
 - (void)startUploadPart:(int)partNumber {
-    if(partNumber >= self.total_parts)
+    if(partNumber >= self.total_parts) {
+        if(self.total_parts == 0) {
+            [self cancel];
+        }
         return;
+    }
+    
     
     __block int readFromBufferSize = [self lengthOfReadBytesForPart:partNumber];
 
@@ -314,8 +334,14 @@
                 
                 data = [self readDataFromPosition:i * self.part_size length:readFromBufferSize];
                 data = [[data mutableCopy] addPadding:16];
-                data = [Crypto aesEncryptModify:data key:self.aes_key iv:self.aes_iv encrypt:YES];
-                [self.encryptedParts setObject:data forKey:@(i)];
+                
+                NSMutableData *copy = [data mutableCopy];
+                
+                
+                MTAesEncryptInplaceAndModifyIv(copy, self.aes_key, self.aes_iv);
+                [self.encryptedParts setObject:copy forKey:@(i)];
+                
+                data = copy;
             }
             
             self.maxEncryptedPart = partNumber;
@@ -399,8 +425,7 @@
 - (void)saveFileInfo:(id)fileInfo {
     if(!self.isEncrypted && _fileMD5Hash.length > 0) {
         if(self.uploadType == UploadImageType ||
-           self.uploadType == UploadDocumentType ||
-           self.uploadType == UploadVideoType ) {
+           self.uploadType == UploadDocumentType) {
             
             id manager = [NSClassFromString(@"Storage") performSelector:@selector(manager)];
             

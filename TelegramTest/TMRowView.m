@@ -60,6 +60,12 @@
     }
 }
 
+-(void)setValue:(id)value forKey:(NSString *)key {
+    if([self respondsToSelector:NSSelectorFromString(key)])
+        [super setValue:value forKey:key];
+}
+
+
 - (void) setItem:(id)item selected:(BOOL)isSelected {
     
     self.rowItem = item;

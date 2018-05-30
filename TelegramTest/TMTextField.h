@@ -8,6 +8,10 @@
 
 #import <Foundation/Foundation.h>
 
+@interface NSTextField (Extension)
+-(void)setAttributedString:(NSAttributedString *)attributedString;
+@end
+
 @interface PlaceholderTextView : TMView
 //@property (nonatomic) BOOL isDraw;
 @property (nonatomic, strong) NSAttributedString *placeholderAttributedString;
@@ -17,6 +21,9 @@
 @protocol TMTextFieldDelegate <NSObject>
 
 -(void)textFieldDidChange:(id)field;
+
+@optional
+-(void)textFieldDidBecomeFirstResponder:(id)field;
 
 @end
 

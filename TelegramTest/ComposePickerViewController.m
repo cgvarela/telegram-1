@@ -33,6 +33,7 @@
 }
 
 
+
 -(void)setAction:(ComposeAction *)action animated:(BOOL)animated {
     [super setAction:action];
     
@@ -84,9 +85,9 @@
     
     NSMutableArray *ids = [[NSMutableArray alloc] init];
     
-    [self.action.result.multiObjects enumerateObjectsUsingBlock:^(SelectUserItem *obj, NSUInteger idx, BOOL *stop) {
+    [self.action.result.multiObjects enumerateObjectsUsingBlock:^(TLUser *obj, NSUInteger idx, BOOL *stop) {
         
-        [ids addObject:@(obj.user.n_id)];
+        [ids addObject:@(obj.n_id)];
     }];
     
     self.tableView.selectedItems = ids;
@@ -115,13 +116,36 @@
 
 -(void)selectTableDidChangedItem:(SelectUserItem *)item {
     
-    self.action.result = [[ComposeResult alloc] initWithMultiObjects:[self.tableView selectedItems]];
+    NSMutableArray *users = [[NSMutableArray alloc] init];
+    
+    if(self.action.behavior.limit == 0) {
+        [users addObject:item.user];
+    } else {
+        [self.tableView.selectedItems enumerateObjectsUsingBlock:^(SelectUserItem *obj, NSUInteger idx, BOOL *stop) {
+            
+            [users addObject:obj.user];
+            
+        }];
+    }
+    
+    
+    if(!self.action.result)
+        self.action.result = [[ComposeResult alloc] initWithMultiObjects:users];
+     else
+         self.action.result.multiObjects = users;
+    
     
     [self setCenterBarViewTextAttributed:self.action.behavior.centerTitle];
     
     [self.action.behavior composeDidChangeSelected];
     
+    [self updateActionNavigation];
+    
     [self.doneButton setDisable:self.action.result.multiObjects.count == 0 || self.action.behavior.doneTitle.length == 0];
+}
+
+-(void)dealloc {
+    [_tableView clear];
 }
 
 

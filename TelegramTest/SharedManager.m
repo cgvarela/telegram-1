@@ -31,11 +31,14 @@ static NSMutableArray *managers;
 
 
 +(void)drop {
-    [ASQueue dispatchOnStageQueue:^{
-        for (SharedManager *manager in managers) {
+    
+    int bp = 0;
+    
+    for (SharedManager *manager in managers) {
+        [manager.queue dispatchOnQueue:^{
             [manager drop];
-        }
-    }];
+        } synchronous:NO];
+    }
 }
 
 -(id)init {
@@ -62,14 +65,24 @@ static NSMutableArray *managers;
     return self;
 }
 
-
-
--(void)add:(NSArray *)all {
-    [self add:all withCustomKey:@"n_id"];
+-(SSignal *)add:(NSArray *)all autoStart:(BOOL)autoStart {
+    return [self add:all withCustomKey:@"n_id" autoStart:autoStart];
 }
 
--(void)add:(NSArray *)all withCustomKey:(NSString*)key {
-    [_queue dispatchOnQueue:^{
+-(SSignal *)add:(NSArray *)all {
+    return [self add:all withCustomKey:@"n_id" autoStart:YES];
+}
+
+-(SSignal *)add:(NSArray *)all withCustomKey:(NSString*)key {
+    return [self add:all withCustomKey:key autoStart:YES];
+}
+
+-(SSignal *)add:(NSArray *)all withCustomKey:(NSString*)key autoStart:(BOOL)autoStart {
+    
+    SSignal *signal = [[[SSignal alloc] initWithGenerator:^id<SDisposable>(SSubscriber * subscriber) {
+        
+        __block BOOL dispose = NO;
+        
         for (id obj in all) {
             id current = [keys objectForKey:[obj valueForKey:key]];
             if(current == nil) {
@@ -80,8 +93,32 @@ static NSMutableArray *managers;
                 [self->list addObject:obj];
             }
             [self save:obj];
+            
+            if(dispose)
+                break;
         }
-    }];
+        
+        [subscriber putNext:nil];
+        
+        
+        return [[SBlockDisposable alloc] initWithBlock:^
+        {
+            dispose = YES;
+        }];
+    }] startOn:self.queue];
+    
+    
+    if(autoStart)
+        [signal startWithNext:^(id next) {
+            
+        }];
+    
+    
+    return signal;
+}
+
+-(SSignal *)search:(NSString *)query {
+    return [SSignal single:nil];
 }
 
 -(void)remove:(NSArray*)all {
@@ -102,7 +139,6 @@ static NSMutableArray *managers;
         [self->list removeObject:current];
         [self->keys removeObjectForKey:key];
     }
-
 }
 
 
@@ -156,26 +192,27 @@ static NSMutableArray *managers;
         
         [TL_localMessage convertReceivedMessages:[response messages]];
         
-        
-        [[MessagesManager sharedManager] add:[response messages]];
-        [[Storage manager] insertMessages:[response messages]  completeHandler:nil];
+        [[Storage manager] insertMessages:[response messages]];
     }
    
     if([response respondsToSelector:@selector(n_messages)] && [response n_messages].count > 0) {
         
         [TL_localMessage convertReceivedMessages:[response n_messages]];
         
-        [[MessagesManager sharedManager] add:[response n_messages]];
-        [[Storage manager] insertMessages:[response n_messages]  completeHandler:nil];
+        [[Storage manager] insertMessages:[response n_messages]];
     }
     
     if([response respondsToSelector:@selector(users)] && [response users].count > 0) {
-        [[UsersManager sharedManager] add:[response users]];
+        [[[UsersManager sharedManager] add:[response users] autoStart:NO] startWithNext:^(id next) {
+            [[Storage manager] insertUsers:next];
+        }];
     }
    
     if([response respondsToSelector:@selector(chats)] && [response chats].count > 0) {
-        [[ChatsManager sharedManager] add:[response chats]];
-        [[Storage manager] insertChats:[response chats] completeHandler:nil];
+        [[[ChatsManager sharedManager] add:[response chats] autoStart:NO] startWithNext:^(id next) {
+            [[Storage manager] insertChats:next];
+        }];
+        
     } 
 }
 
@@ -191,20 +228,38 @@ static NSMutableArray *managers;
 }
 
 -(NSArray *)searchWithString:(NSString *)search selector:(NSString *)selector {
+    return [self searchWithString:search selector:selector checker:nil];
+}
+
+-(NSArray *)searchWithString:(NSString *)search selector:(NSString *)selector checker:(BOOL (^)(id object))checker {
     
    return [self->list filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id evaluatedObject, NSDictionary *bindings) {
        
-       if([evaluatedObject respondsToSelector:NSSelectorFromString(selector)]) {
-           id value = [evaluatedObject valueForKey:selector];
-           
-           if([value isKindOfClass:NSString.class]) {
-               
-               return [value searchInStringByWordsSeparated:search];
-               
-           }
-       }
+       NSArray *selectors = [selector componentsSeparatedByString:@" "];
        
-       return NO;
+       
+       __block BOOL match = NO;
+       if(!checker || checker(evaluatedObject)) {
+           [selectors enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+               if([evaluatedObject respondsToSelector:NSSelectorFromString(obj)]) {
+                   
+                   id value = [evaluatedObject valueForKey:obj];
+                   
+                   if([value isKindOfClass:NSString.class]) {
+                       
+                       match = [value searchInStringByWordsSeparated:search];
+                       
+                       if(match) {
+                           *stop = YES;
+                       }
+                       
+                   }
+               }
+            }];
+        }
+       
+       return match;
+       
        
    }]];
     

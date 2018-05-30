@@ -40,9 +40,20 @@
     
 }
 
+-(Class)viewClass {
+    return [TMRowView class];
+}
+
+-(NSString *)identifier {
+    return NSStringFromClass([self viewClass]);
+}
+
+-(int)height {
+    return 60;
+}
+
 -(id)initWithObject:(id)object {
     if(self = [super init]) {
-        
     }
     return self;
 }
@@ -66,6 +77,10 @@
 + (NSUInteger)hash:(NSObject *)object {
     [NSException raise:@"Not implemented" format:@""];
     return 0;
+}
+
+-(BOOL)updateItemHeightWithWidth:(int)width {
+    return NO;
 }
 
 @end

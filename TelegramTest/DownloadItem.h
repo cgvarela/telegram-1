@@ -24,7 +24,7 @@ typedef void (^DownloadItemHandler)(DownloadItem *item);
 
 @interface DownloadEventListener : NSObject
 @property (atomic,copy) DownloadItemHandler progressHandler;
-@property (atomic,strong) DownloadItemHandler completeHandler;
+@property (atomic,copy) DownloadItemHandler completeHandler;
 @property (atomic,copy) DownloadItemHandler errorHandler;
 
 
@@ -79,9 +79,9 @@ typedef enum {
 @property (nonatomic,assign) BOOL isRemoteLoaded;
 
 
+@property (nonatomic,assign,readonly) int date;
 
-
-
+-(BOOL)isNeedRequestAgain;
 
 //@property (atomic,copy) DownloadItemHandler progressHandler;
 //@property (atomic,copy) DownloadItemHandler errorHandler;
@@ -106,10 +106,15 @@ typedef enum {
 -(void)resetItem;
 -(TLInputFileLocation *)input;
 
+
+@property (nonatomic,strong) ASQueue *deliveryQueue;
+
 -(int)partSize;
 
 -(id)initWithObject:(id)object size:(int)size;
 
 -(DownloadOperation *)nOperation;
 
+-(BOOL)instantlySave;
+-(BOOL)checkSize;
 @end

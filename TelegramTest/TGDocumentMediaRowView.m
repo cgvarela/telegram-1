@@ -27,6 +27,9 @@
 
 @property (nonatomic,strong) BTRButton *selectButton;
 
+@property (nonatomic,strong) DownloadEventListener *downloadEventListener;
+
+
 @end
 
 @implementation TGDocumentMediaRowView
@@ -70,7 +73,7 @@ static NSDictionary *colors;
         [_nameField setEditable:NO];
         [_nameField setBordered:NO];
         [_nameField setBackgroundColor:[NSColor clearColor]];
-        [_nameField setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12]];
+        [_nameField setFont:TGSystemMediumFont(12)];
         [[_nameField cell] setLineBreakMode:NSLineBreakByTruncatingTail];
         [[_nameField cell] setTruncatesLastVisibleLine:YES];
         
@@ -82,13 +85,13 @@ static NSDictionary *colors;
         [_descriptionField setEditable:NO];
         [_descriptionField setBordered:NO];
         [_descriptionField setBackgroundColor:[NSColor clearColor]];
-        [_descriptionField setFont:[NSFont fontWithName:@"HelveticaNeue" size:12]];
+        [_descriptionField setFont:TGSystemFont(12)];
         [[_descriptionField cell] setLineBreakMode:NSLineBreakByTruncatingTail];
         [[_descriptionField cell] setTruncatesLastVisibleLine:YES];
         
         [_descriptionField setTextColor:GRAY_TEXT_COLOR];
         
-        [_descriptionField setFrame:NSMakeRect(s_dox + 50, 11, NSWidth(frameRect) - s_dox * 2 - 50, 20)];
+        [_descriptionField setFrame:NSMakeRect(s_dox + 50, 8, NSWidth(frameRect) - s_dox * 2 - 50, 20)];
         
         [_descriptionField setUrl_delegate:self];
                 
@@ -96,14 +99,14 @@ static NSDictionary *colors;
         
     
         
-        _downloadImageView = [[TMView alloc] initWithFrame:NSMakeRect(s_dox + 50, 15, image_SharedMediaDocumentStatusDownload().size.width, image_SharedMediaDocumentStatusDownload().size.height)];
+        _downloadImageView = [[TMView alloc] initWithFrame:NSMakeRect(s_dox + 50, 11, image_SharedMediaDocumentStatusDownload().size.width, image_SharedMediaDocumentStatusDownload().size.height)];
         
         
         [_downloadImageView addSubview:imageViewWithImage(image_SharedMediaDocumentStatusDownload())];
         
         [self addSubview:_downloadImageView];
         
-        _thumbView = [[TGSharedMediaFileThumbnailView alloc] initWithFrame:NSMakeRect(s_dox, 10, 40, 40)];
+        _thumbView = [[TGSharedMediaFileThumbnailView alloc] initWithFrame:NSMakeRect(s_dox, 9, 40, 40)];
         
         [self addSubview:_thumbView];
         
@@ -197,13 +200,15 @@ static NSDictionary *colors;
     
 }
 
+
+
 -(void)setItem:(MessageTableItemDocument *)item {
     
     [super setItem:item];
     
-    [self.nameField setStringValue:item.fileName];
+    [self.nameField setStringValue:item.message.media.document.file_name];
     
-    NSString *ext = [item.fileName pathExtension];
+    NSString *ext = [item.message.media.document.file_name pathExtension];
     
     NSArray *c = colors[ext];
     
@@ -216,8 +221,16 @@ static NSDictionary *colors;
     [_thumbImageView setObject:item.thumbObject];
     
     [self updateCellState];
+    
+    
 }
 
+-(BOOL)isSelected {
+    
+    TGDocumentsMediaTableView *table = (TGDocumentsMediaTableView *) self.item.table;
+    
+    return [table isSelectedItem:self.item];
+}
 
 -(void)mouseDown:(NSEvent *)theEvent {
     if(!self.isEditable) {
@@ -248,13 +261,16 @@ static NSDictionary *colors;
     MessageTableItemDocument *item = (MessageTableItemDocument *) self.item;
     
     if([item isset]) {
-        [self.descriptionField setAttributedStringValue:docLoadedAttributedString()];
+        if ([item.message isKindOfClass:[TL_destructMessage class]])
+            [self.descriptionField setAttributedStringValue:[[NSAttributedString alloc] init]];
+        else
+            [self.descriptionField setAttributedStringValue:docLoadedAttributedString()];
     } else {
         
         if(self.item.downloadItem.downloadState == DownloadStateDownloading) {
             NSString *downloadString = [NSString stringWithFormat:NSLocalizedString(@"Document.Downloading", nil), self.item.downloadItem.progress];
             
-            [self.descriptionField setAttributedStringValue:[[NSAttributedString alloc] initWithString:downloadString attributes:@{NSFontAttributeName: [NSFont fontWithName:@"HelveticaNeue" size:12], NSForegroundColorAttributeName: NSColorFromRGB(0x9b9b9b)}]];
+            [self.descriptionField setAttributedStringValue:[[NSAttributedString alloc] initWithString:downloadString attributes:@{NSFontAttributeName: TGSystemFont(12), NSForegroundColorAttributeName: NSColorFromRGB(0x9b9b9b)}]];
          } else {
             [self.descriptionField setStringValue:[NSString stringWithFormat:@"%@ • %@",item.fileSize,item.fullDate]];
         }
@@ -295,9 +311,17 @@ static NSDictionary *colors;
     
     if(self.item.downloadItem) {
         
-        [self.item.downloadListener setCompleteHandler:^(DownloadItem * item) {
+        [self.item.downloadItem removeEvent:_downloadEventListener];
+        
+         _downloadEventListener = [[DownloadEventListener alloc] init];
+        
+        [self.item.downloadItem addEvent:_downloadEventListener];
+        
+       
+        
+        [_downloadEventListener setCompleteHandler:^(DownloadItem * item) {
             
-            [[ASQueue mainQueue] dispatchOnQueue:^{
+            [ASQueue dispatchOnMainQueue:^{
                 weakSelf.item.downloadItem = nil;
                 [weakSelf updateCellState];
                 [weakSelf setNeedsDisplay:YES];
@@ -305,7 +329,7 @@ static NSDictionary *colors;
             
         }];
         
-        [self.item.downloadListener setProgressHandler:^(DownloadItem * item) {
+        [_downloadEventListener setProgressHandler:^(DownloadItem * item) {
             
             [ASQueue dispatchOnMainQueue:^{
                 [weakSelf updateCellState];
@@ -376,9 +400,14 @@ static NSDictionary *colors;
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Documents menu"];
     
     if([self.item isset]) {
-        [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Message.File.ShowInFinder", nil) withBlock:^(id sender) {
-            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:((MessageTableItemDocument *)self.item).path]]];
-        }]];
+        
+        if(![self.item.message isKindOfClass:[TL_destructMessage class]]) {
+            [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Message.File.ShowInFinder", nil) withBlock:^(id sender) {
+                [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:((MessageTableItemDocument *)self.item).path]]];
+            }]];
+        }
+        
+        
         
         [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.SaveAs", nil) withBlock:^(id sender) {
             [self performSelector:@selector(saveAs:) withObject:self];
@@ -462,12 +491,14 @@ static NSDictionary *colors;
     return menu;
 }
 
+
+
 - (void)copy:(id)sender {
     
     if(![self.item.message.media isKindOfClass:[TL_messageMediaEmpty class]]) {
         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
         [pasteboard clearContents];
-        [pasteboard writeObjects:[NSArray arrayWithObject:[NSURL fileURLWithPath:mediaFilePath(self.item.message.media)]]];
+        [pasteboard writeObjects:[NSArray arrayWithObject:[NSURL fileURLWithPath:mediaFilePath(self.item.message)]]];
     }
 }
 
@@ -475,9 +506,6 @@ static NSDictionary *colors;
     [self.selectButton setSelected:selected];
 }
 
--(BOOL)isSelected {
-    return [(TGDocumentsMediaTableView *)self.item.table isSelectedItem:self.item];
-}
 
 -(BOOL)isEditable {
     return [(TGDocumentsMediaTableView *)self.item.table isEditable];
@@ -568,7 +596,7 @@ static NSDictionary *colors;
         
         NSSavePanel *panel = [NSSavePanel savePanel];
         
-        NSString *path = mediaFilePath(self.item.message.media);
+        NSString *path = mediaFilePath(self.item.message);
         
         NSString *fileName = [path lastPathComponent];
         
@@ -650,6 +678,15 @@ static NSDictionary *colors;
         
     }]];
     
+    NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+        
+        [self.messagesViewController.navigationViewController showMessagesViewController:self.item.message.conversation withMessage:self.item.message];
+        
+    }];
+    
+    [items addObject:photoGoto];
+    
+    
     return items;
     
 }
@@ -687,7 +724,7 @@ static NSAttributedString *docLoadedAttributedString() {
         NSRange range = [mutableAttributedString appendString:NSLocalizedString(@"Message.File.ShowInFinder", nil) withColor:BLUE_UI_COLOR];
         [mutableAttributedString setLink:@"finder" forRange:range];
         
-        [mutableAttributedString setFont:[NSFont fontWithName:@"HelveticaNeue" size:12] forRange:mutableAttributedString.range];
+        [mutableAttributedString setFont:TGSystemFont(12) forRange:mutableAttributedString.range];
         
         instance = mutableAttributedString;
     });

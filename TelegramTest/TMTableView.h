@@ -11,6 +11,9 @@
 #import "TMRowView.h"
 #import "TMScrollView.h"
 
+
+@class TMViewController;
+
 @protocol TMTableViewDelegate <NSObject>
 
 - (CGFloat)rowHeight:(NSUInteger)row item:(TMRowItem *) item;
@@ -29,15 +32,22 @@
 @property (nonatomic, strong, readonly) TMScrollView *scrollView;
 @property (nonatomic, strong, readonly) NSTableColumn *tableColumn;
 @property (nonatomic) BOOL multipleSelection;
-@property (nonatomic, strong) id<TMTableViewDelegate> tm_delegate;
+@property (nonatomic, weak) id<TMTableViewDelegate> tm_delegate;
 @property (nonatomic) BOOL hoverCells;
 @property (nonatomic) NSTableViewAnimationOptions defaultAnimation;
+
+@property (nonatomic,weak) TMViewController *viewController;
+
+@property (nonatomic,strong,readonly) Class stickClass;
+@property (nonatomic,strong,readonly) TMRowView *currentStickView;
 
 
 + (TMTableView *)current;
 + (void)setCurrent:(TMTableView *)table;
 
 - (void)checkHover;
+
+-(int)tableHeight;
 
 - (TMRowView *) cacheViewForClass:(Class)classObject
                        identifier:(NSString *)identifier;
@@ -68,10 +78,10 @@
                      to:(NSUInteger)to
             tableRedraw:(BOOL)tableRedraw;
 
-- (NSObject *) itemByHash:(NSUInteger)hash;
-- (NSObject *) itemAtPosition:(NSUInteger)positionOfItem;
+- (id) itemByHash:(NSUInteger)hash;
+- (id) itemAtPosition:(NSUInteger)positionOfItem;
 - (NSUInteger)indexOfItem:(NSObject *)item;
-- (NSObject *)selectedItem;
+- (id)selectedItem;
 - (BOOL) setSelectedByHash:(NSUInteger)hash;
 - (void) cancelSelection;
 - (void) cancelSelection:(NSObject*)object;
@@ -84,5 +94,13 @@
 - (NSUInteger) count;
 
 - (BOOL) setSelectedObject:(NSObject *)item ;
+
+-(BOOL)rowIsVisible:(NSUInteger)index;
+
+-(void)clear;
+
+
+-(void)setStickClass:(Class)stickClass;
+-(void)scrollToItem:(TMRowItem *)item animated:(BOOL)animated yOffset:(int)yOffset;
 
 @end

@@ -7,14 +7,15 @@
 //
 
 #import "TMViewController.h"
-#import "SearchViewController.h"
+#import "TGModernSearchvViewController.h"
 @interface StandartViewController : TMViewController
-@property (nonatomic, strong, readonly) SearchViewController *searchViewController;
+@property (nonatomic, strong, readonly) TGModernSearchvViewController *searchViewController;
 
 @property (nonatomic,strong) NSView *searchView;
 @property (nonatomic,strong) NSView *mainView;
 
 -(BOOL)isSearchActive;
 +(NSMenu *)attachMenu;
+-(void)hideSearchViewControllerWithConversationUsed:(TL_conversation*)conversation;
 -(void)searchByString:(NSString *)searchString;
 @end

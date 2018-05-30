@@ -11,9 +11,10 @@
 #import "GeneralSettingsBlockHeaderView.h"
 #import "GeneralSettingsRowItem.h"
 #import "TGPasslock.h"
+#import "TGSettingsTableView.h"
 #import "NSData+Extensions.h"
 @interface TGPasscodeSettingsViewController ()<TMTableViewDelegate>
-@property (nonatomic,strong) TMTableView *tableView;
+@property (nonatomic,strong) TGSettingsTableView *tableView;
 @end
 
 @implementation TGPasscodeSettingsViewController
@@ -25,10 +26,8 @@
     
     [self setCenterBarViewText:NSLocalizedString(@"PasscodeSettings.Header", nil)];
     
-    self.tableView = [[TMTableView alloc] initWithFrame:self.view.bounds];
-    
-    self.tableView.tm_delegate = self;
-    
+    self.tableView = [[TGSettingsTableView alloc] initWithFrame:self.view.bounds];
+        
     
     [self.view addSubview:self.tableView.containerView];
     
@@ -44,7 +43,7 @@
     
     [self.tableView removeAllItems:NO];
     
-    GeneralSettingsRowItem *turnPasscode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeSelected callback:^(GeneralSettingsRowItem *item) {
+    GeneralSettingsRowItem *turnPasscode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeSelected callback:^(TGGeneralRowItem *item) {
         
         
         
@@ -89,7 +88,7 @@
         
         
         
-    } description:[[MTNetwork instance] passcodeIsEnabled] ? NSLocalizedString(@"PasscodeSettings.TurnOffPasscode", nil) : NSLocalizedString(@"PasscodeSettings.TurnOnPasscode", nil) height:82 stateback:^id(GeneralSettingsRowItem *item) {
+    } description:[[MTNetwork instance] passcodeIsEnabled] ? NSLocalizedString(@"PasscodeSettings.TurnOffPasscode", nil) : NSLocalizedString(@"PasscodeSettings.TurnOnPasscode", nil) height:82 stateback:^id(TGGeneralRowItem *item) {
         return @(NO);
     }];
     
@@ -97,11 +96,7 @@
     
     if(![[MTNetwork instance] passcodeIsEnabled]) {
         
-        GeneralSettingsBlockHeaderItem *description = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"PasscodeSettings.TurnOnDescription", nil)];
-        
-        
-        description.height = 100;
-        description.isFlipped = YES;
+        GeneralSettingsBlockHeaderItem *description = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"PasscodeSettings.TurnOnDescription", nil) height:100 flipped:YES];
         
         [self.tableView insert:description atIndex:self.tableView.count tableRedraw:NO];
     }
@@ -110,7 +105,7 @@
     
     if([[MTNetwork instance] passcodeIsEnabled]) {
         
-        GeneralSettingsRowItem *changePasscode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeSelected callback:^(GeneralSettingsRowItem *item) {
+        GeneralSettingsRowItem *changePasscode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeSelected callback:^(TGGeneralRowItem *item) {
             
             [self showChangePasslock:^BOOL(BOOL result, NSString *md5Hash) {
                 
@@ -130,7 +125,7 @@
                 
             }];
             
-        } description:NSLocalizedString(@"PasscodeSettings.ChangePasscode", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+        } description:NSLocalizedString(@"PasscodeSettings.ChangePasscode", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
             return @(NO);
         }];
         
@@ -139,10 +134,15 @@
         [self.tableView insert:changePasscode atIndex:self.tableView.list.count tableRedraw:NO];
         
         
-        GeneralSettingsRowItem *autoLockPasscode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeChoice callback:^(GeneralSettingsRowItem *item) {
+        GeneralSettingsBlockHeaderItem *description = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"PasscodeSettings.TurnOffDescription", nil) flipped:YES];
+        
+        [self.tableView insert:description atIndex:self.tableView.count tableRedraw:NO];
+        
+        
+        GeneralSettingsRowItem *autoLockPasscode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeChoice callback:^(TGGeneralRowItem *item) {
             
             
-        } description:NSLocalizedString(@"PasscodeSettings.AutoLock", nil) height:82 stateback:^id(GeneralSettingsRowItem *item) {
+        } description:NSLocalizedString(@"PasscodeSettings.AutoLock", nil) height:82 stateback:^id(TGGeneralRowItem *item) {
             return [TGPasslock autoLockDescription];
         }];
         
@@ -155,6 +155,8 @@
             [TGPasslock setAutoLockTime:0];
             [self.tableView reloadData];
         }]];
+        
+
         
         [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Passcode.AutoLockTime60", nil) withBlock:^(id sender) {
             [TGPasslock setAutoLockTime:60];
@@ -193,38 +195,5 @@
 }
 
 
-- (CGFloat)rowHeight:(NSUInteger)row item:(GeneralSettingsRowItem *) item {
-    return  item.height;
-}
-
-- (BOOL)isGroupRow:(NSUInteger)row item:(GeneralSettingsRowItem *) item {
-    return NO;
-}
-
-- (TMRowView *)viewForRow:(NSUInteger)row item:(TMRowItem *) item {
-    
-    if([item isKindOfClass:[GeneralSettingsBlockHeaderItem class]]) {
-        return [self.tableView cacheViewForClass:[GeneralSettingsBlockHeaderView class] identifier:@"GeneralSettingsBlockHeaderView"];
-    }
-    
-    if([item isKindOfClass:[GeneralSettingsRowItem class]]) {
-        return [self.tableView cacheViewForClass:[GeneralSettingsRowView class] identifier:@"GeneralSettingsRowViewClass"];
-    }
-    
-    return nil;
-    
-}
-
-- (void)selectionDidChange:(NSInteger)row item:(GeneralSettingsRowItem *) item {
-    
-}
-
-- (BOOL)selectionWillChange:(NSInteger)row item:(GeneralSettingsRowItem *) item {
-    return NO;
-}
-
-- (BOOL)isSelectable:(NSInteger)row item:(GeneralSettingsRowItem *) item {
-    return NO;
-}
 
 @end

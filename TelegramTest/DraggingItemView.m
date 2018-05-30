@@ -96,9 +96,9 @@
 
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender {
   
-    TL_conversation *dialog = [Telegram rightViewController].messagesViewController.conversation;
+    TL_conversation *dialog = [DraggingControllerView view].navigationController.messagesViewController.conversation;
   
-    return [MessageSender sendDraggedFiles:sender dialog:dialog asDocument:_type == DraggingTypeDocument];
+    return [MessageSender sendDraggedFiles:sender dialog:dialog asDocument:_type == DraggingTypeDocument messagesViewController:[DraggingControllerView view].navigationController.messagesViewController];
 }
 
 
@@ -141,7 +141,7 @@
     if(_title) {
         range = [str appendString:_title withColor:NSColorFromRGB(0xA1A1A1)];
         
-        [str addAttributes:@{NSFontAttributeName:[NSFont fontWithName:@"HelveticaNeue" size:13]} range:range];
+        [str addAttributes:@{NSFontAttributeName:TGSystemFont(13)} range:range];
         
         [str setAlignment:NSCenterTextAlignment range:range];
     }
@@ -149,7 +149,7 @@
     if(_subtitle) {
         range = [str appendString:[@"\n" stringByAppendingString:_subtitle] withColor:NSColorFromRGB(0x333333)];
         
-        [str addAttributes:@{NSFontAttributeName:[NSFont fontWithName:@"HelveticaNeue" size:22]} range:range];
+        [str addAttributes:@{NSFontAttributeName:TGSystemFont(22)} range:range];
         
         [str setAlignment:NSCenterTextAlignment range:range];
     }

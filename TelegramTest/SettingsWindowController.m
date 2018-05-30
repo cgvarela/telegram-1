@@ -8,18 +8,16 @@
 
 #import "SettingsWindowController.h"
 #import "NSStringCategory.h"
-#import "TMClickTextFieldView.h"
-#import "ImageStorage.h"
 
 #import <AddressBook/AddressBookUI.h>
 #import <AddressBook/AddressBook.h>
 
 
-#import "BlockedTableController.h"
 
 @interface SettingsWindowController ()<SettingsListener>
 
 @property (weak) IBOutlet NSButton *open_links_in_background;
+@property (weak) IBOutlet NSButton *convertEmoji;
 
 @property (weak) IBOutlet NSButton *auto_downlod_video_group;
 @property (weak) IBOutlet NSButton *auto_downlod_video_private;
@@ -42,7 +40,6 @@
 @property (weak) IBOutlet NSToolbar *tool_bar;
 @property (weak) IBOutlet NSButton *add_to_blocks;
 
-@property (weak) IBOutlet BlockedTableController *blocked_table_view;
 @property (weak) IBOutlet NSButton *remove_from_block_button;
 
 @property (nonatomic,strong) ABPeoplePickerView *peoplePickerView;
@@ -103,6 +100,8 @@
     
  
     [self.open_links_in_background setTitle:NSLocalizedString(@"Settings.OpenLinksBackground", nil)];
+    
+    [self.convertEmoji setTitle:NSLocalizedString(@"Settings.EmojiReplaces", nil)];
     
     [self.auto_downlod_video_private setTitle:NSLocalizedString(@"Settings.PrivateChats", nil)];
     [self.auto_downlod_video_group setTitle:NSLocalizedString(@"Settings.Groups", nil)];
@@ -172,10 +171,11 @@
     [self.generalToolItem setLabel:NSLocalizedString(@"Settings.General", nil)];
     [self.accountToolItem setLabel:NSLocalizedString(@"Settings.Account", nil)];
     
+    [self.markedInputText setTitle:NSLocalizedString(@"Settings.CheckMarkedInputText", nil)];
     
-    self.blocked_table_view.removeButton = self.remove_from_block_button;
     
-    [self.chat_settings_view setFrameOrigin:NSMakePoint(0, 60)];
+    
+    [self.chat_settings_view setFrameOrigin:NSMakePoint(0, 30)];
     
     [self.security_settings_view setFrameOrigin:NSMakePoint(-5, self.security_settings_view.frame.size.height-70)];
     
@@ -228,6 +228,8 @@ static void ListChanged(LSSharedFileListRef inList, void *context) {
     [self.sound_notifications_button setHidden:!([NSUserNotification class] && [NSUserNotificationCenter class])];
     
     [self.open_links_in_background setState:[SettingsArchiver checkMaskedSetting:OpenLinksInBackground]];
+    
+    [self.convertEmoji setState:[SettingsArchiver checkMaskedSetting:EmojiReplaces]];
     
     [self.auto_downlod_video_group setState:[SettingsArchiver checkMaskedSetting:AutoGroupVideo]];
     [self.auto_downlod_video_private setState:[SettingsArchiver checkMaskedSetting:AutoPrivateVideo]];
@@ -386,6 +388,9 @@ static void ListChanged(LSSharedFileListRef inList, void *context) {
 - (IBAction)soundEffectCheckbox:(id)sender {
 [SettingsArchiver addOrRemoveSetting:SoundEffects];
 }
+- (IBAction)convertEmoji:(id)sender {
+    [SettingsArchiver addOrRemoveSetting:EmojiReplaces];
+}
 
 - (IBAction)openLinksInBackground:(id)sender {
     [SettingsArchiver addOrRemoveSetting:OpenLinksInBackground];
@@ -405,7 +410,6 @@ static void ListChanged(LSSharedFileListRef inList, void *context) {
 - (IBAction)clearCache:(id)sender {
     [Storage saveEmoji:[NSMutableArray array]];
     [Storage saveInputTextForPeers:[NSMutableDictionary dictionary]];
-    [ImageStorage clearCache];
 }
 - (IBAction)terminateSessions:(id)sender {
     
@@ -500,22 +504,6 @@ static void ListChanged(LSSharedFileListRef inList, void *context) {
     
 }
 
-
-
-- (IBAction)addBlockedUser:(id)sender {
-    
-    NSMutableArray *filter = [[NSMutableArray alloc] init];
-    
-    for (TL_contactBlocked *contact in self.blocked_table_view.blockedList) {
-        [filter addObject:@(contact.user_id)];
-    }
-    
-}
-
-
-- (IBAction)removeBlockedUsers:(id)sender {
-    [self.blocked_table_view unblockSelected];
-}
 
 -(void)updateWindowWithHeight:(float)height animate:(BOOL)animate {
     

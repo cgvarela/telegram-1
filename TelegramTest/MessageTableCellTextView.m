@@ -10,11 +10,16 @@
 #import "MessageTableCellTextView.h"
 #import "MessageTableItemText.h"
 #import "TGTimerTarget.h"
-#import "POPCGUtils.h"
+#import <pop/POPCGUtils.h>
 #import "TGImageView.h"
 #import "XCDYouTubeKit.h"
 #import "TGWebpageContainer.h"
-
+#import "TMMediaController.h"
+#import "TMPreviewPhotoItem.h"
+#import "TMPreviewDocumentItem.h"
+#import "TGUserPopup.h"
+#import "TMMenuPopover.h"
+#import "TGGameView.h"
 @interface TestTextView : NSTextView
 @property (nonatomic, strong) NSString *rand;
 @property (nonatomic) BOOL isSelecedRange;
@@ -23,9 +28,7 @@
 
 
 @interface MessageTableCellTextView() <TMHyperlinkTextFieldDelegate>
-
-
-
+@property (nonatomic,strong) TGGameView *gameView;
 @property (nonatomic,strong) TGWebpageContainer *webpageContainerView;
 
 @end
@@ -33,23 +36,26 @@
 @implementation MessageTableCellTextView
 
 
+
 - (id)initWithFrame:(NSRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
         
+        
+        
+        
         _textView = [[TGMultipleSelectTextView alloc] initWithFrame:self.bounds];
         
-        [self.containerView addSubview:self.textView];
+        weak();
         
-        [self.containerView setIsFlipped:YES];
+        [_textView setLinkCallback:^(NSString *link) {
+           open_link_with_controller(link, weakSelf.messagesViewController.navigationViewController);
+        }];
         
-        
-        [self.progressView removeFromSuperview];
 
         
-        _textView.wantsLayer = YES;
-        
-        
+        [self.containerView addSubview:self.textView];
+    
     }
     return self;
 }
@@ -68,23 +74,23 @@
 }
 
 
-- (void)setEditable:(BOOL)editable animation:(BOOL)animation {
-    [super setEditable:editable animation:animation];
+- (void)setEditable:(BOOL)editable animated:(BOOL)animated {
+    [super setEditable:editable animated:animated];
     [self.textView setEditable:!editable];
 }
 
 
-- (void)updateCellState {
+- (void)updateCellState:(BOOL)animated {
     
     
     MessageTableItem *item =(MessageTableItem *)self.item;
     
     if(item.downloadItem && (item.downloadItem.downloadState != DownloadStateWaitingStart && item.downloadItem.downloadState != DownloadStateCompleted)) {
-        self.cellState = item.downloadItem.downloadState == DownloadStateCanceled ? CellStateCancelled : CellStateDownloading;
+        [self setCellState:item.downloadItem.downloadState == DownloadStateCanceled ? CellStateCancelled : CellStateDownloading animated:animated];
     } else if(item.messageSender && item.messageSender.state != MessageSendingStateSent ) {
-        self.cellState = item.messageSender.state == MessageSendingStateCancelled ? CellStateCancelled : CellStateSending;
+        [self setCellState:item.messageSender.state == MessageSendingStateCancelled ? CellStateCancelled : CellStateSending animated:animated];
     } else {
-        self.cellState = CellStateNormal;
+        [self setCellState:CellStateNormal animated:animated];
     }
     
 }
@@ -92,16 +98,14 @@
 
 -(void)mouseDown:(NSEvent *)theEvent {
     [super mouseDown:theEvent];
-    
-    MessageTableItemText *item = (MessageTableItemText *)[self item];
-    
+ 
 }
 
 - (void) setItem:(MessageTableItemText *)item {
     
  
     [super setItem:item];
-    
+       
     
     if([item isWebPage]) {
         
@@ -113,19 +117,33 @@
             [self.containerView addSubview:_webpageContainerView];
         }
         
-        [_webpageContainerView setFrame:NSMakeRect(0, item.textSize.height + 5, item.webpage.size.width, item.webpage.blockHeight)];
-        
-        [_webpageContainerView setWebpage:item.webpage];
+        [_webpageContainerView setFrame:NSMakeRect(0, item.textSize.height + item.defaultContentOffset, item.webpage.size.width + item.defaultOffset, item.webpage.blockHeight)];
         
         [_webpageContainerView setItem:item];
         
+        [_webpageContainerView setWebpage:item.webpage];
         
     } else {
         [_webpageContainerView removeFromSuperview];
         _webpageContainerView = nil;
+        
+       
     }
     
-    [self updateCellState];
+    if (item.isGame) {
+        if (_gameView == nil) {
+            _gameView = [[TGGameView alloc] initWithFrame:NSZeroRect];
+            [self.containerView addSubview:_gameView];
+        }
+        [_gameView setFrame:NSMakeRect(0, 0, item.game.size.width + item.defaultOffset, item.game.size.height)];
+        [_gameView setGame:item.game];
+        
+    } else {
+        [_gameView removeFromSuperview];
+        _gameView = nil;
+    }
+    
+    [self updateCellState:NO];
     
     [self.textView setFrameSize:NSMakeSize(item.textSize.width , item.textSize.height)];
     
@@ -141,18 +159,19 @@
 }
 
 
--(void)setCellState:(CellState)cellState {
-    [super setCellState:cellState];
+-(void)setCellState:(CellState)cellState animated:(BOOL)animated {
+    [super setCellState:cellState animated:animated];
     
-    MessageTableItemText *item = (MessageTableItemText *)[self item];
     
     [self.webpageContainerView updateState:cellState];
     
 }
 
+
 - (NSMenu *)contextMenu {
+    
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Text menu"];
-   
+
     
     [self.defaultMenuItems enumerateObjectsUsingBlock:^(NSMenuItem *item, NSUInteger idx, BOOL *stop) {
         [menu addItem:item];
@@ -190,57 +209,35 @@
     
      [super _didChangeBackgroundColorWithAnimation:anim toColor:color];
     
+    [_webpageContainerView _didChangeBackgroundColorWithAnimation:anim toColor:color];
+    [_gameView _didChangeBackgroundColorWithAnimation:anim toColor:color];
+    
     if(!anim) {
         self.textView.backgroundColor = color;
-        return;
+        self.webpageContainerView.descriptionField.backgroundColor = color;
+    } else {
+        [self.textView pop_addAnimation:anim forKey:@"background"];
+        [self.webpageContainerView.descriptionField pop_addAnimation:anim forKey:@"background"];
     }
-
-    POPBasicAnimation *animation = [POPBasicAnimation animation];
-    
-    animation.property = [POPAnimatableProperty propertyWithName:@"background" initializer:^(POPMutableAnimatableProperty *prop) {
-        
-        [prop setReadBlock:^(TGCTextView *textView, CGFloat values[]) {
-            POPCGColorGetRGBAComponents(textView.backgroundColor.CGColor, values);
-        }];
-        
-        [prop setWriteBlock:^(TGCTextView *textView, const CGFloat values[]) {
-            CGColorRef color = POPCGColorRGBACreate(values);
-            textView.backgroundColor = [NSColor colorWithCGColor:color];
-        }];
-        
-    }];
-    
-    animation.toValue = anim.toValue;
-    animation.fromValue = anim.fromValue;
-    animation.duration = anim.duration;
-    [self.textView pop_addAnimation:animation forKey:@"background"];
-    
-    [self.webpageContainerView.descriptionField pop_addAnimation:animation forKey:@"background"];
-    
 }
 
 
+-(void)_didScrolledTableView:(NSNotification *)notification {
+    [super _didScrolledTableView:notification];
 
--(void)_colorAnimationEvent {
-    
-    CALayer *currentLayer = (CALayer *)[self.textView.layer presentationLayer];
-    
-    id value = [currentLayer valueForKeyPath:@"backgroundColor"];
-    
-    self.textView.layer.backgroundColor = (__bridge CGColorRef)(value);
-    [self.textView setNeedsDisplay:YES];
-    
 }
 
--(void)setSelected:(BOOL)selected animation:(BOOL)animation {
-    if(selected == self.isSelected)
-        return;
+
+-(void)setSelected:(BOOL)selected animated:(BOOL)animated {
     
-    [super setSelected:selected animation:animation];
+    [super setSelected:selected animated:animated];
     
-    if(!animation) {
+    if(!animated) {
         [self.textView setBackgroundColor:selected ? NSColorFromRGB(0xf7f7f7) : NSColorFromRGB(0xffffff)];
     }
 }
+
+
+
 
 @end

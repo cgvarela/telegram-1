@@ -16,11 +16,18 @@
 @implementation MessageSenderItem
 
 
--(id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation noWebpage:(BOOL)noWebpage {
+-(id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation entities:(NSArray *)entities noWebpage:(BOOL)noWebpage additionFlags:(int)additionFlags {
     
     if(self = [super initWithConversation:conversation]) {
         
-        self.message = [MessageSender createOutMessage:message media:[TL_messageMediaEmpty create] conversation:conversation];
+        message = [message trim];
+        
+        self.message = [MessageSender createOutMessage:message media:[TL_messageMediaEmpty create] conversation:conversation additionFlags:additionFlags];
+        
+
+        self.message.entities = [entities mutableCopy];
+        
+
         
         if(noWebpage)
             self.message.media = [TL_messageMediaWebPage createWithWebpage:[TL_webPageEmpty createWithN_id:0]];
@@ -32,8 +39,8 @@
     return self;
 }
 
--(id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation {
-    if(self = [self initWithMessage:message forConversation:conversation noWebpage:YES]) {
+-(id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags {
+    if(self = [self initWithMessage:message forConversation:conversation  entities:nil noWebpage:YES additionFlags:additionFlags]) {
         
     }
     
@@ -49,55 +56,66 @@
     
     id request;
     
-    if(self.conversation.type != DialogTypeBroadcast) {
-        
-        int flags = self.message.reply_to_msg_id != 0 ? 1 : 0;
-        
-        flags|=[self.message.media.webpage isKindOfClass:[TL_webPageEmpty class]] ? 2 : 0;
-        
-        
-        request = [TLAPI_messages_sendMessage createWithFlags:flags peer:[self.conversation inputPeer] reply_to_msg_id:self.message.reply_to_msg_id message:[self.message message] random_id:[self.message randomId] reply_markup:[TL_replyKeyboardMarkup createWithFlags:0 rows:[@[]mutableCopy]]];
-    } else {
-        
-        TL_broadcast *broadcast = self.conversation.broadcast;
-        
-        request = [TLAPI_messages_sendBroadcast createWithContacts:[broadcast inputContacts] random_id:[broadcast generateRandomIds] message:self.message.message media:[TL_inputMediaEmpty create]];
-    }
     
-    self.rpc_request = [RPCRequest sendRequest:request successHandler:^(RPCRequest *request, TL_messages_sentMessage * response) {
+    
+    request = [TLAPI_messages_sendMessage createWithFlags:[self senderFlags] peer:[self.conversation inputPeer] reply_to_msg_id:self.message.reply_to_msg_id message:[self.message message] random_id:[self.message randomId] reply_markup:[TL_replyKeyboardMarkup createWithFlags:0 rows:nil] entities:self.message.entities];
+    
+    
+    weak();
+    self.rpc_request = [RPCRequest sendRequest:request successHandler:^(RPCRequest *request, TL_updateShortSentMessage *response) {
         
+        strongWeak();
         
-        if(self.conversation.type != DialogTypeBroadcast)  {
+        if(strongSelf != nil) {
             
-            self.message.n_id = response.n_id;
-            self.message.date = response.date;
-            self.message.media = response.media;
             
             
-        }
-        
-        self.message.dstate = DeliveryStateNormal;
-        
-        [self.message save:YES];
-        
-        self.state = MessageSendingStateSent;
-        
-        if([self.message.media isKindOfClass:[TL_messageMediaWebPage class]])
-        {
-            [Notification perform:UPDATE_WEB_PAGE_ITEMS data:@{KEY_MESSAGE_ID_LIST:@[@(self.message.n_id)]}];
-        }
+            [strongSelf updateMessageId:response];
+            
+            if([response isKindOfClass:[TL_updates class]]) {
+                
+                response = (TL_updateShortSentMessage *)[[strongSelf updateNewMessageWithUpdates:response] message];
+                
+                
+            }
+            
+            strongSelf.message.n_id = response.n_id;
+            strongSelf.message.date = response.date;
+            strongSelf.message.media = response.media;
+            strongSelf.message.entities = response.entities;
+            strongSelf.message.dstate = DeliveryStateNormal;
+            
+            [strongSelf.message save:YES];
+            
+            strongSelf.state = MessageSendingStateSent;
+            
+            
+            if([strongSelf.message.media isKindOfClass:[TL_messageMediaWebPage class]])
+            {
+                [Notification perform:UPDATE_WEB_PAGE_ITEMS data:@{KEY_DATA:@{@(strongSelf.message.peer_id):@[@(strongSelf.message.n_id)]},KEY_WEBPAGE:strongSelf.message.media.webpage}];
+            }
+            
+            if(strongSelf.message.entities.count > 0) {
+                [Notification perform:UPDATE_MESSAGE_ENTITIES data:@{KEY_MESSAGE:strongSelf.message}];
+            }
 
+        }
+        
+        
         
     } errorHandler:^(RPCRequest *request, RpcError *error) {
-        self.state = MessageSendingStateError;
-    }];
+        weakSelf.state = MessageSendingStateError;
+    } timeout:30 queue:[ASQueue globalQueue].nativeQueue];
     
 }
+
+
 
 
 
 -(void)resend {
     
 }
+
 
 @end

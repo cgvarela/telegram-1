@@ -24,14 +24,26 @@
 +(void)show:(NSString *)string chat:(TLChat *)chat view:(NSView *)view ofRect:(NSRect)rect callback:(void (^)(NSString *userName))callback {
     
     
-    TLChatFull *fullChat = [[FullChatManager sharedManager] find:chat.n_id];
+    TLChatFull *fullChat = [[ChatFullManager sharedManager] find:chat.n_id];
     
     NSMutableArray *uids = [[NSMutableArray alloc] init];
     
-    [fullChat.participants.participants enumerateObjectsUsingBlock:^(TLChatParticipant * obj, NSUInteger idx, BOOL *stop) {
-        [uids addObject:@(obj.user_id)];
+    if([chat isKindOfClass:[TL_chat class]]) {
+        [fullChat.participants.participants enumerateObjectsUsingBlock:^(TLChatParticipant * obj, NSUInteger idx, BOOL *stop) {
+            [uids addObject:@(obj.user_id)];
+            
+        }];
+    } else {
         
-    }];
+        NSArray *contacts = [[NewContactsManager sharedManager] all];
+        
+        [contacts enumerateObjectsUsingBlock:^(TLContact *obj, NSUInteger idx, BOOL *stop) {
+            
+             [uids addObject:@(obj.user_id)];
+            
+        }];
+    }
+    
     
     
     NSArray *users = [UsersManager findUsersByMention:string withUids:uids];
@@ -67,7 +79,7 @@
         
         [[self popover] showRelativeToRect:rect ofView:view preferredEdge:CGRectMinYEdge];
         
-        [[self popover].contentViewController selectNext];
+        [(TMMenuController *)[self popover].contentViewController selectNext];
     } else {
         [self close];
     }

@@ -15,7 +15,6 @@
 @interface TGImageAttachmentsController ()
 @property (nonatomic,strong) TGTransformScrollView *scrollView;
 @property (nonatomic,strong) TMView *containerView;
-@property (nonatomic,strong) TL_conversation *conversation;
 @end
 
 @implementation TGImageAttachmentsController
@@ -57,17 +56,15 @@
     return self;
 }
 
+-(void)setBackgroundColor:(NSColor *)backgroundColor {
+    [super setBackgroundColor:backgroundColor];
+    _containerView.backgroundColor = backgroundColor;
+}
+
 -(void)show:(TL_conversation *)conversation animated:(BOOL)animated {
     
     
-    if(_conversation == conversation) {
-        _isShown = _containerView.subviews.count > 0;
-        [self setHidden:!_isShown];
-        return;
-    }
-    
-    
-    _conversation = conversation;
+     self.conversation = conversation;
     
     [_containerView removeAllSubviews];
     [self updateContainer];
@@ -104,6 +101,9 @@
     
 }
 
+-(void)setConversation:(TL_conversation *)conversation {
+    _conversation = conversation;
+}
 
 
 -(void)hide:(BOOL)animated deleteItems:(BOOL)deleteItems {
@@ -133,6 +133,7 @@
         [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
             
             NSMutableArray *attachments = [transaction objectForKey:_conversation.cacheKey inCollection:ATTACHMENTS];
+
             
             [attachments removeAllObjects];
             
@@ -140,13 +141,30 @@
             
         }];
     }
+    
+    _conversation = nil;
 
+}
+
+-(BOOL)isDone {
+    __block BOOL done = YES;
+    
+    [_containerView.subviews enumerateObjectsUsingBlock:^(TGImageAttachment *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        
+        if(!obj.item.isDone) {
+            done = NO;
+            *stop = YES;
+        }
+        
+    }];
+    
+    return done;
 }
 
 -(void)mouseUp:(NSEvent *)theEvent {
     
-    if([TMViewController isModalActive])
-        return;
+//    if([TMViewController isModalActive])
+//        return;
     
     [self.delegate didChangeAttachmentsCount:0];
     
@@ -174,13 +192,13 @@
 -(void)removeItem:(TGImageAttachment *)attachment animated:(BOOL)animated {
     
     
-    __block NSMutableArray *attachments;
-    
     [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
         
-        attachments = [transaction objectForKey:_conversation.cacheKey inCollection:ATTACHMENTS];
+        NSMutableArray *attachments = [transaction objectForKey:_conversation.cacheKey inCollection:ATTACHMENTS];
         
         [attachments removeObject:attachment.item];
+        
+        [attachment.item cancel];
         
         [transaction setObject:attachments forKey:_conversation.cacheKey inCollection:ATTACHMENTS];
         
@@ -199,12 +217,15 @@
         
         [CATransaction begin];
         
-        [self fadeAnimation:@[attachment] from:1 to:0 complete:^(BOOL finished) {
-            [attachment removeFromSuperview];
-            
+        __weak TGImageAttachment *weakAttach = attachment;
+        
+        [self fadeAnimation:@[weakAttach] from:1 to:0 complete:^(BOOL finished) {
+            [weakAttach removeFromSuperview];
             
             [self updateItemsOrigin];
             [self updateContainer];
+            
+            
             
         }];
         
@@ -297,7 +318,7 @@
             prev = _containerView.subviews[idx -1];
         }
         
-        [obj setFrameOrigin:NSMakePoint(NSMaxX(prev.frame) + 10, 1)];
+        [obj setFrameOrigin:NSMakePoint(NSMaxX(prev.frame) + 10, NSHeight(_containerView.frame) - NSHeight(obj.frame))];
         
     }];
     
@@ -310,15 +331,7 @@
 }
 
 -(NSArray *)attachments {
-    NSMutableArray *a = [[NSMutableArray alloc] init];
-    
-    [_containerView.subviews enumerateObjectsUsingBlock:^(TGImageAttachment *obj, NSUInteger idx, BOOL *stop) {
-        
-        [a insertObject:obj.item atIndex:0];
-        
-    }];
-    
-    return a;
+    return _containerView.subviews;
 }
 
 
@@ -345,7 +358,7 @@
         TGImageAttachment *lastAttach = [_containerView.subviews lastObject];
         
         
-        [obj setFrameOrigin:NSMakePoint(NSMaxX(lastAttach.frame) + 10, 1)];
+        [obj setFrameOrigin:NSMakePoint(NSMaxX(lastAttach.frame) + 10, NSHeight(_containerView.frame) - NSHeight(obj.frame))];
         
         [obj setDeleteAccept:YES];
         
@@ -357,10 +370,8 @@
         [_scrollView.clipView scrollRectToVisible:NSMakeRect(NSWidth(_containerView.frame), 0, 0, 0) animated:animated completion:^(BOOL scrolled) {
         }];
         
+
     }];
-    
-    
-    
     
     
     if(animated)
@@ -374,7 +385,7 @@
     animation.toValue = @(to);
     animation.fromValue = @(from);
     animation.duration = 0.2;
-    
+    animation.removedOnCompletion = YES;
     
     [items enumerateObjectsUsingBlock:^(TGImageAttachment *obj, NSUInteger idx, BOOL *stop) {
         
@@ -414,6 +425,7 @@
     animation.toValue = toValue;
     animation.fromValue = fromValue;
     animation.duration = 0.2;
+    animation.removedOnCompletion = YES;
     
     TGAnimationBlockDelegate *delegate = [[TGAnimationBlockDelegate alloc] initWithLayer:attachment.layer];
         

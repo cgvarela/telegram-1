@@ -8,7 +8,7 @@
 
 #import "TGEmbedModalView.h"
 #import <WebKit/WebKit.h>
-@interface TGEmbedModalView ()
+@interface TGEmbedModalView () <WebFrameLoadDelegate>
 @property (nonatomic,strong) WebView *webView;
 @property (nonatomic,strong) TLWebPage *webpage;
 @property (nonatomic,strong) NSProgressIndicator *progress;
@@ -31,7 +31,11 @@
         
         [self addSubview:_progress];
         
+        
+        
         _webView = [[WebView alloc] initWithFrame:NSMakeRect(0, 0, 300, 300)];
+        
+        _webView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         
         [self addSubview:_webView];
         
@@ -61,8 +65,13 @@
     [_webView setHidden:NO];
 }
 
+-(void)dealloc {
+    _webView.frameLoadDelegate = nil;
+}
+
 
 -(void)modalViewDidHide {
+    [[_webView mainFrame] loadRequest:nil];
     _webpage = nil;
 }
 
@@ -71,13 +80,27 @@
     
     NSSize embedSize = NSMakeSize(_webpage.embed_width, _webpage.embed_height);
     
-    embedSize = strongsize(embedSize, MIN(newSize.width,newSize.height) - 10);
+    embedSize = strongsize(embedSize, MIN(newSize.width,newSize.height) - 30);
     
     [self setContainerFrameSize:embedSize];
+    
+}
+
+
+
+-(BOOL)becomeFirstResponder {
+    return [_webView becomeFirstResponder];
+}
+
+-(void)setContainerFrameSize:(NSSize)size {
+    [super setContainerFrameSize:size];
+    
     
     [_webView setFrame:NSMakeRect(3, 3, self.containerSize.width - 6, self.containerSize.height - 6)];
     
     [_progress setCenterByView:_progress.superview];
+
+    
 }
 
 @end

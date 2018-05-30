@@ -8,6 +8,7 @@
 
 #import "TGMessagesStickerImageObject.h"
 #import "DownloadPhotoItem.h"
+#import "DownloadQueue.h"
 @implementation TGMessagesStickerImageObject
 
 @synthesize supportDownloadListener = _supportDownloadListener;
@@ -27,17 +28,33 @@
     
     [self.downloadItem addEvent:_supportDownloadListener];
     
+    
     [self.downloadItem addEvent:self.downloadListener];
     
     
     weak();
     
     [self.downloadListener setCompleteHandler:^(DownloadItem * item) {
-        weakSelf.isLoaded = YES;
         
-        [weakSelf _didDownloadImage:item];
-        weakSelf.downloadItem = nil;
-        weakSelf.downloadListener = nil;
+        [TGImageObject.threadPool addTask:[[SThreadPoolTask alloc] initWithBlock:^(bool (^canceled)()) {
+            
+            strongWeak();
+            @try {
+                if(strongSelf == weakSelf) {
+                    weakSelf.isLoaded = YES;
+                    
+                    [weakSelf _didDownloadImage:item];
+                    weakSelf.downloadItem = nil;
+                    weakSelf.downloadListener = nil;
+                }
+            } @catch (NSException *exception) {
+                
+            }
+            
+            
+            
+        }]];
+         
     }];
     
     
@@ -61,11 +78,11 @@
         
         image = renderedImage(image, self.imageSize);
         
-        [TGCache cacheImage:image forKey:[self cacheKey] groups:@[IMGCACHE]];
+        [TGCache cacheImage:image forKey:[self cacheKey] groups:@[STICKERSCACHE]];
     }
     
     
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self.delegate didDownloadImage:image object:self];
     }];
 }

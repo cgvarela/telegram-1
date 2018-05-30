@@ -15,20 +15,14 @@ typedef enum {
     AutoPrivateAudio = 1 << 4,
     AutoGroupDocuments = 1 << 5,
     AutoPrivateDocuments = 1 << 6,
-    
     SendEnter = 1 << 7,
     SendCmdEnter = 1 << 8,
-    
-    OnlineFocused = 1 << 9,
+     OnlineFocused = 1 << 9,
     OnlineForever = 1 << 10,
-    
     AutoOpenDocuments = 1 << 11,
     OpenLinksInBackground = 1 << 12,
     SoundEffects = 1 << 13,
-    
-    
     BlockedContactsSynchronized = 1 << 14,
-    
     AutoGroupPhoto = 1 << 15,
     AutoPrivatePhoto = 1 << 16,
     PushNotifications = 1 << 17,
@@ -38,9 +32,19 @@ typedef enum {
     StatusBarIcon = 1 << 21,
     SmartNotifications = 1 << 22,
     MarkedInputText = 1 << 23,
-    MessagesNotificationPreview = 1 << 24
+    MessagesNotificationPreview = 1 << 24,
+    IncludeMutedUnreadCount = 1 << 25,
+    DisableAutoplayGifSetting = 1 << 26,
+    TripleLayoutSettings = 1 << 27,
+    HandleMediaKeysSettings = 1 << 28,
+    ESGLayoutSettings = 1 << 29,
+    NRegistredUsers = 1 << 30
 } SettingsMask;
 
+
+typedef enum {
+    PushEventMaskDisableChannelMessageNotification = 1 << 1
+} PushEventMask;
 
 typedef enum {
     DownloadLimitSize10 = 10*1024*1024,
@@ -59,7 +63,9 @@ typedef enum {
 
 @interface SettingsArchiver : NSObject<NSCoding>
 
-
+extern NSString *const kPermissionInlineBotGeo;
+extern NSString *const kPermissionInlineBotContact;
+extern NSString *const kPermissionInlineBotLocationRequest;
 /*
  binary settings mask
 */
@@ -74,7 +80,28 @@ typedef enum {
 
 + (int)contain:(int)mask;
 
++(NSFont *)font;
 
++(NSFont *)font11;
++(NSFont *)font12;
++(NSFont *)font13;
++(NSFont *)font14;
++(NSFont *)font15;
+
++(NSFont *)font125;
++(NSFont *)fontMedium125;
+
++(NSFont *)fontMedium11;
++(NSFont *)fontMedium12;
++(NSFont *)fontMedium13;
++(NSFont *)fontMedium14;
++(NSFont *)fontMedium15;
+
++(NSFont *)fontBold11;
++(NSFont *)fontBold12;
++(NSFont *)fontBold13;
++(NSFont *)fontBold14;
++(NSFont *)fontBold15;
 
 + (void)addEventListener:(id<SettingsListener>)listener;
 + (void)removeEventListener:(id<SettingsListener>)listener;
@@ -96,4 +123,11 @@ typedef enum {
 + (void)notifyOfLaunch;
 + (BOOL)isLaunchAtStartup;
 + (void)toggleLaunchAtStartup;
+
+
++(void)toggleDefaultEnabledESGLayout;
++(BOOL)isDefaultEnabledESGLayout;
+
++(void)requestPermissionWithKey:(NSString *)permissionKey peer_id:(int)peer_id handler:(void (^)(bool success))handler;
+
 @end

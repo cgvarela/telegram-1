@@ -7,27 +7,27 @@
 //
 
 #import "DownloadStickerItem.h"
-
+#import "TLDocument+Extension.h"
 @implementation DownloadStickerItem
 
--(id)initWithObject:(TL_localMessage *)object {
+-(id)initWithObject:(TLDocument *)object {
     if(self = [super initWithObject:object]) {
         self.isEncrypted = NO;
-        self.n_id = object.media.document.n_id;
-        self.path = [NSString stringWithFormat:@"%@/%ld.webp",path(),object.media.document.n_id];
+        self.n_id = object.n_id;
+        self.path = object.path_with_cache;
         self.fileType = DownloadFileDocument;
-        self.dc_id = object.media.document.dc_id;
-        self.size = object.media.document.size;
+        self.dc_id = object.dc_id;
+        self.size = object.size;
     }
     return self;
 }
 
 -(TLInputFileLocation *)input {
-    TLMessage *message = self.object;
+    TLDocument *document = self.object;
     if(self.isEncrypted)
-        return [TL_inputEncryptedFileLocation createWithN_id:message.media.document.n_id access_hash:message.media.document.access_hash];
+        return [TL_inputEncryptedFileLocation createWithN_id:document.n_id access_hash:document.access_hash];
     
-    return [TL_inputDocumentFileLocation createWithN_id:message.media.document.n_id access_hash:message.media.document.access_hash];
+    return [TL_inputDocumentFileLocation createWithN_id:document.n_id access_hash:document.access_hash version:document.version];
 }
 
 @end

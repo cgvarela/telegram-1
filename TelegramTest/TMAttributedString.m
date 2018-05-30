@@ -135,6 +135,13 @@ DYNAMIC_PROPERTY(AttachmentsSelected);
     [self addAttribute:NSFontAttributeName value:font range:range];
 }
 
+
+
+- (void)setCTFont:(NSFont *)font forRange:(NSRange)range {
+    if(font)
+        [self addAttribute:(NSString *)kCTFontAttributeName value:CFBridgingRelease(CTFontCreateWithFontDescriptor((__bridge CTFontDescriptorRef)[font fontDescriptor], 0.0f, NULL)) range:range];
+}
+
 - (void)setLink:(NSString *)link forRange:(NSRange)range {
     [self setLink:link withColor:nil forRange:range];
 }

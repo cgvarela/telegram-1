@@ -11,15 +11,12 @@
 #import "Notification.h"
 #import "TLPeer+Extensions.h"
 #import "UploadOperation.h"
-#import "ImageCache.h"
-#import "ImageStorage.h"
 #import "ImageUtils.h"
-#import <QTKit/QTKit.h>
 #import "Crypto.h"
 #import "FileUtils.h"
 #import "QueueManager.h"
 #import "NSMutableData+Extension.h"
-#import <MTProtoKit/MTEncryption.h>
+#import <MtProtoKitMac/MTEncryption.h>
 #import "SelfDestructionController.h"
 #import <AVFoundation/AVFoundation.h>
 #import "Telegram.h"
@@ -30,6 +27,12 @@
 #import "Telegram.h"
 #import "TGTimer.h"
 #import "NSString+FindURLs.h"
+#import "TGLocationRequest.h"
+#import "TGContextMessagesvViewController.h"
+#import "TGEmbedModalView.h"
+#import "TGModernESGViewController.h"
+#import "TGModalArchivedPacks.h"
+#import "TGWebgameViewController.h"
 @implementation MessageSender
 
 
@@ -57,7 +60,7 @@
     AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:avAsset presetName:AVAssetExportPreset640x480];
     
     
-    
+    exportSession.shouldOptimizeForNetworkUse = YES;
     exportSession.outputURL = [NSURL fileURLWithPath:compressedPath];
     exportSession.outputFileType = AVFileTypeMPEG4;
    // exportSession
@@ -102,8 +105,9 @@
              [progressTimer invalidate];
              progressTimer = nil;
              
-             if(!success)
+             if(!success || fileSize(path) < fileSize(compressedPath))
              {
+                 [[NSFileManager defaultManager] removeItemAtPath:compressedPath error:nil];
                  [[NSFileManager defaultManager] copyItemAtPath:path toPath:compressedPath error:nil];
              }
              
@@ -122,11 +126,9 @@
     int duration = ceil(time.value / time.timescale);
     
     
-    
-    
     AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     generator.appliesPreferredTrackTransform = TRUE;
-    CMTime thumbTime = CMTimeMakeWithSeconds(0, 30);
+    CMTime thumbTime = CMTimeMakeWithSeconds(0, 1);
     
     __block NSImage *thumbImg;
     
@@ -153,13 +155,13 @@
 
     
     
-    NSSize size = NSMakeSize(MIN(640, [asset naturalSize].width), MIN(480,[asset naturalSize].height));
+    NSSize size = strongsize([asset naturalSize], 640);
     return @{@"duration": @(duration), @"image":thumbImg, @"size":NSStringFromSize(size)};
 }
 
 
 
-+(TL_localMessage *)createOutMessage:(NSString *)msg media:(TLMessageMedia *)media conversation:(TL_conversation *)conversation {
++(TL_localMessage *)createOutMessage:(NSString *)msg media:(TLMessageMedia *)media conversation:(TL_conversation *)conversation additionFlags:(int)additionFlags {
     
     __block NSString *message = msg;
     
@@ -172,9 +174,15 @@
     __block BOOL clear = YES;
     __block BOOL removeKeyboard = NO;
     
+    
+    TGInputMessageTemplate *template = [TGInputMessageTemplate templateWithType:TGInputMessageTemplateTypeSimpleText ofPeerId:conversation.peer_id];
+    
+    replyMessage = template.replyMessage;
+    
+    
+    
+    
     [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
-        
-        replyMessage = [transaction objectForKey:conversation.cacheKey inCollection:REPLAY_COLLECTION];
         
         
         keyboardMessage = [transaction objectForKey:conversation.cacheKey inCollection:BOT_COMMANDS];
@@ -188,30 +196,16 @@
                 
                 if([message isEqualToString:button.text]) {
                     clear = NO;
-                    
                     *stop = YES;
                 }
                 
             }];
-            
-            
+
         }];
         
         
-//        if(((keyboardMessage.reply_markup.flags & (1 << 1) ) == (1 << 1)) && !clear) {
-//            
-//            [transaction removeObjectForKey:conversation.cacheKey inCollection:BOT_COMMANDS];
-//            
-//            removeKeyboard = YES;
-//        }
         
-        [transaction removeObjectForKey:conversation.cacheKey inCollection:REPLAY_COLLECTION];
-       
     }];
-    
-
-    
-    
     
     if(clear) {
         keyboardMessage = nil;
@@ -219,7 +213,7 @@
     
     if([media isKindOfClass:[TL_messageMediaEmpty class]]) {
         
-        webpage = [Storage findWebpage:[message webpageLink]];
+        webpage = [Storage findWebpage:display_url([message webpageLink])];
     }
     
     if(!replyMessage && keyboardMessage.peer_id < 0 && !clear) {
@@ -231,14 +225,30 @@
     
     int flags = TGOUTMESSAGE;
     
-    if(!conversation.user.isBot)
+    if(!conversation.user.isBot && conversation.type != DialogTypeChannel)
         flags|=TGUNREADMESSAGE;
     
     if(reply_to_msg_id > 0)
         flags|=TGREPLYMESSAGE;
     
+        
     
-    TL_localMessage *outMessage = [TL_localMessage createWithN_id:0 flags:flags from_id:UsersManager.currentUserId to_id:[conversation.peer peerOut]  fwd_from_id:0 fwd_date:0 reply_to_msg_id:reply_to_msg_id  date: (int) [[MTNetwork instance] getTime] message:message media:media fakeId:[MessageSender getFakeMessageId] randomId:rand_long() reply_markup:nil state:DeliveryStatePending];
+    // channel from_id check this after update server side
+    flags|=TGFROMIDMESSAGE;
+    
+    
+    TL_localMessage *outMessage = [TL_localMessage createWithN_id:0 flags:flags from_id:UsersManager.currentUserId to_id:[conversation.peer peerOut]  fwd_from:nil reply_to_msg_id:reply_to_msg_id  date: (int) [[MTNetwork instance] getTime] message:message media:media fakeId:[MessageSender getFakeMessageId] randomId:rand_long() reply_markup:nil entities:nil views:1 via_bot_id:0 edit_date:0 isViewed:NO state:DeliveryStatePending];
+    
+    if(media.bot_result != nil) {
+        outMessage.reply_markup = media.bot_result.send_message.reply_markup;
+    }
+    
+    if(additionFlags & (1 << 4))
+        outMessage.flags|= (1 << 14);
+    
+    
+    if(conversation.needRemoveFromIdBeforeSend)
+        outMessage.from_id = 0;
     
     if(webpage)
     {
@@ -248,21 +258,22 @@
     if(reply_to_msg_id != 0)
     {
         [[Storage manager] addSupportMessages:@[replyMessage]];
-        [[MessagesManager sharedManager] addSupportMessages:@[replyMessage]];
+        outMessage.replyMessage = replyMessage;
     }
     
     
-    if(conversation.peer_id == [Telegram conversation].peer_id) {
-        if(replyMessage || removeKeyboard) {
-            [ASQueue dispatchOnMainQueue:^{
-                
-                if(replyMessage) {
-                    [[Telegram rightViewController].messagesViewController removeReplayMessage:YES animated:YES];
-                }
-                
-            }];
-        }
-        
+    [template setReplyMessage:nil save:YES];
+
+    if(message.length > 0) {
+        [[template updateSignalText:[[NSAttributedString alloc] init]] startWithNext:^(id next) {
+            if([next[0] boolValue] || replyMessage) {
+                [template saveTemplateInCloudIfNeeded];
+                [template performNotification];
+            }
+        }];
+    } else if(replyMessage) {
+        [template saveTemplateInCloudIfNeeded];
+        [template performNotification];
     }
     
     
@@ -270,9 +281,300 @@
 }
 
 
++(NSString *)parseEntities:(NSString *)message entities:(NSMutableArray *)entities backstrips:(NSString *)backstrips startIndex:(NSUInteger)startIndex {
+    
+    NSRange startRange = [message rangeOfString:backstrips options:0 range:NSMakeRange(startIndex, message.length - startIndex)];
+    
+    
+    if(startRange.location != NSNotFound) {
+        
+        NSRange stopRange = [message rangeOfString:backstrips options:0 range:NSMakeRange(startRange.location + startRange.length, message.length - (startRange.location + startRange.length ))];
+        
+        if(stopRange.location != NSNotFound) {
+            
+            TLMessageEntity *entity;
+            
+            NSString *innerMessage = [message substringWithRange:NSMakeRange(startRange.location + 1,stopRange.location - (startRange.location + 1))];
+            
+            
+            if(innerMessage.trim.length > 0)  {
+                message = [message stringByReplacingOccurrencesOfString:backstrips withString:@"" options:0 range:NSMakeRange(startRange.location, stopRange.location + stopRange.length  - startRange.location)];
+                
+                
+                
+                if(backstrips.length == 3) {
+                    entity = [TL_messageEntityPre createWithOffset:(int)startRange.location length:(int)(stopRange.location - startRange.location - startRange.length) language:@""];
+                } else
+                entity = [TL_messageEntityCode createWithOffset:(int)startRange.location length:(int)(stopRange.location - startRange.location - startRange.length)];
+                
+                [entities addObject:entity];
+            } else {
+                startIndex = stopRange.location + 1;
+            }
+            
+            
+            if(message.length > 0) {
+                
+                
+                int others = 0;
+                if([[message substringToIndex:1] isEqualToString:@"\n"]) {
+                    message = [message substringFromIndex:1];
+                    others = 1;
+                }
+                
+                
+                [entities enumerateObjectsUsingBlock:^(TLMessageEntity *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                    
+                    if(obj.offset > stopRange.location + stopRange.length) {
+                        obj.offset-=((int)stopRange.length*2);
+                    }
+                    
+                    if(obj.offset > 0) {
+                        obj.offset-=others;
+                    }
+                    
+                }];
+                
+                if([message rangeOfString:backstrips].location != NSNotFound) {
+                    return [self parseEntities:message entities:entities backstrips:backstrips startIndex:startIndex];
+                }
+            }
+            
+            
+            
+        }
+        
+    }
+    
+    return message;
+    
+}
+
++(NSString *)parseCustomMentions:(NSString *)message entities:(NSMutableArray *)entities {
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"((?<!\\w)@\\[([^\\[\\]]+(\\|))+([0-9])+\\])" options:NSRegularExpressionCaseInsensitive error:nil];
+    NSArray *mentions = [[regex matchesInString:message options:0 range:NSMakeRange(0, [message length])] mutableCopy];
+    
+    __block NSMutableString *replacedMessage = [message mutableCopy];
+    
+    @try {
+        [mentions enumerateObjectsUsingBlock:^(NSTextCheckingResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            
+            NSString *text = [replacedMessage substringWithRange:obj.range];
+            
+            NSString *name = [text substringWithRange:NSMakeRange(2, [text rangeOfString:@"|"].location - 2)];
+            int user_id = [[text substringWithRange:NSMakeRange([text rangeOfString:@"|"].location + 1, text.length - 1 - [text rangeOfString:@"|"].location)] intValue];
+            
+            TLUser *user = [[UsersManager sharedManager] find:user_id];
+            
+            if(user) {
+              //  [entities addObject:[TL_messageEntityMentionName createWithOffset:(int)obj.range.location length:(int)name.length user_id:user_id]];
+                [entities addObject:[TL_inputMessageEntityMentionName createWithOffset:(int)obj.range.location length:(int)name.length input_user_id:user.inputUser]];
+            }
+            
+            
+            [replacedMessage deleteCharactersInRange:obj.range];
+            [replacedMessage insertString:name atIndex:obj.range.location];
+            
+            *stop = YES;
+            
+        }];
+        
+        if(mentions.count > 0)
+            return [self parseCustomMentions:replacedMessage entities:entities];
+
+    } @catch (NSException *exception) {
+        
+    }
+    
+    return replacedMessage;
+    
+}
+
+
++(void)addRatingForPeer:(TLPeer *)peer {
+    
+    
+    TLUser *user = [peer isKindOfClass:[TL_peerUser class]] ? [[UsersManager sharedManager] find:peer.user_id] : nil;
+    
+    [[Storage yap] asyncReadWriteWithBlock:^(YapDatabaseReadWriteTransaction * _Nonnull transaction) {
+        
+        @try {
+            NSMutableArray *top = [transaction objectForKey:@"categories" inCollection:TOP_PEERS];
+            
+            if(top) {
+                int dt = ([[MTNetwork instance] getTime] - [[transaction objectForKey:@"dt" inCollection:TOP_PEERS] intValue]);
+                
+                __block BOOL saved = NO;
+                
+                __block Class currentClass;
+                
+                int drating = pow(M_E, (dt/rating_e_decay()));
+                
+                
+                [top enumerateObjectsUsingBlock:^(TL_topPeerCategoryPeers *obj, NSUInteger idx, BOOL * _Nonnull stop1) {
+                    
+                    BOOL isCurrentCategory = NO;
+                    
+                    if([peer isKindOfClass:[TL_peerUser class]]) {
+                        if(user.isBot && user.isBotInlinePlaceholder) {
+                            isCurrentCategory = [obj.category isKindOfClass:[TL_topPeerCategoryBotsInline class]];
+                            
+                            if(isCurrentCategory)
+                                currentClass = [TL_topPeerCategoryBotsInline class];
+                            
+                        } else if(user.isBot) {
+                            isCurrentCategory = [obj.category isKindOfClass:[TL_topPeerCategoryBotsPM class]];
+                            
+                            if(isCurrentCategory)
+                            currentClass = [TL_topPeerCategoryBotsPM class];
+                        }
+                        else {
+                            isCurrentCategory = [obj.category isKindOfClass:[TL_topPeerCategoryCorrespondents class]];
+                            
+                            if(isCurrentCategory)
+                                currentClass = [TL_topPeerCategoryCorrespondents class];
+                        }
+                    }
+                    
+                    if(!isCurrentCategory) {
+                        isCurrentCategory =([peer isKindOfClass:[TL_peerChat class]] && [obj.category isKindOfClass:[TL_topPeerCategoryGroups class]]);
+                        
+                        if(isCurrentCategory)
+                        currentClass = [TL_topPeerCategoryGroups class];
+                    }
+                    
+                    if(!isCurrentCategory) {
+                        isCurrentCategory = isCurrentCategory || ([peer isKindOfClass:[TL_peerChannel class]] && [obj.category isKindOfClass:[TL_topPeerCategoryChannels class]]);
+                        
+                        if(isCurrentCategory)
+                        currentClass = [TL_topPeerCategoryChannels class];
+                        
+                    }
+                    
+                    
+                    if(isCurrentCategory) {
+                        [obj.peers enumerateObjectsUsingBlock:^(TL_topPeer *topPeer, NSUInteger idx, BOOL * _Nonnull stop2) {
+                            
+                            
+                            if(topPeer.peer.peer_id == peer.peer_id) {
+                                topPeer.rating+= drating;
+                                
+                                
+                                *stop1 = YES;
+                                *stop2 = YES;
+                                
+                                saved = YES;
+                                
+                            }
+                            
+                        }];
+                        
+                        if(!saved) {
+                            [obj.peers addObject:[TL_topPeer createWithPeer:peer rating:drating]];
+                            saved = YES;
+                        }
+                        
+                        [top enumerateObjectsUsingBlock:^(TL_topPeerCategoryPeers *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                            [obj.peers sortUsingComparator:^NSComparisonResult(TL_topPeer *obj1, TL_topPeer *obj2) {
+                                return obj1.rating < obj2.rating ? NSOrderedDescending : obj1.rating > obj2.rating ? NSOrderedAscending : NSOrderedSame;
+                            }];
+                        }];
+                        
+                        [transaction setObject:top forKey:@"categories" inCollection:TOP_PEERS];
+                        
+                    }
+                    
+                }];
+//                
+                
+            }
+
+        } @catch (NSException *exception) {
+            
+        }
+        
+       
+        
+    }];
+    
+}
 
 
 
+
++(void)syncTopCategories:(void (^)(NSArray *categories))completeHandler {
+    
+
+    
+    dispatch_queue_t dqueue = dispatch_get_current_queue();
+    
+    [[Storage yap] asyncReadWriteWithBlock:^(YapDatabaseReadWriteTransaction * _Nonnull transaction) {
+        
+        @try {
+            NSMutableArray *top = [transaction objectForKey:@"categories" inCollection:TOP_PEERS];
+            
+            __block int acc = 0;
+            
+            [top enumerateObjectsUsingBlock:^(TL_topPeerCategoryPeers *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                [obj.peers sortUsingComparator:^NSComparisonResult(TL_topPeer *obj1, TL_topPeer *obj2) {
+                    return obj1.rating < obj2.rating ? NSOrderedDescending : obj1.rating > obj2.rating ? NSOrderedAscending : NSOrderedSame;
+                }];
+                
+                [obj.peers enumerateObjectsUsingBlock:^(TL_topPeer *topPeer, NSUInteger idx, BOOL * _Nonnull stop) {
+                    acc = (acc * 20261) + abs(topPeer.peer.peer_id);
+                }];
+                
+            }];
+            
+            
+            acc = (int)(acc & 0x7FFFFFFF);
+            
+            int offset = 0;
+            
+            dispatch_async(dqueue, ^{
+                if(completeHandler)
+                    completeHandler(top);
+            });
+            
+            if([[transaction objectForKey:@"dt" inCollection:TOP_PEERS] intValue] + 24*60*60 < [[MTNetwork instance] getTime] || completeHandler == nil) {
+                [RPCRequest sendRequest:[TLAPI_contacts_getTopPeers createWithFlags:(1 << 0) | (1 << 2) offset:offset limit:100 n_hash:acc] successHandler:^(id request, TL_contacts_topPeers *response) {
+                    
+                    if([response isKindOfClass:[TL_contacts_topPeers class]]) {
+                        [SharedManager proccessGlobalResponse:response];
+                        
+                        [transaction setObject:response.categories forKey:@"categories" inCollection:TOP_PEERS];
+                        [transaction setObject:@([[MTNetwork instance] getTime]) forKey:@"dt" inCollection:TOP_PEERS];
+                        
+                        dispatch_async(dqueue, ^{
+                            if(completeHandler)
+                                completeHandler(response.categories);
+                        });
+                        
+                    } else {
+                        
+                        [transaction setObject:@([[MTNetwork instance] getTime]) forKey:@"dt" inCollection:TOP_PEERS];
+                        
+                        dispatch_async(dqueue, ^{
+                            if(completeHandler)
+                                completeHandler(top);
+                        });
+                    }
+                    
+                    
+                    
+                } errorHandler:^(id request, RpcError *error) {
+                    
+                }];
+            }
+
+
+        } @catch (NSException *exception) {
+            
+        }
+        
+    }];
+    
+}
 
 +(NSData *)getEncrypted:(EncryptedParams *)params messageData:(NSData *)messageData {
     
@@ -299,7 +601,7 @@
 
 +(void)insertEncryptedServiceMessage:(NSString *)title chat:(TLEncryptedChat *)chat {
     
-    TL_localMessageService *msg = [TL_localMessageService createWithN_id:[MessageSender getFutureMessageId] flags:TGNOFLAGSMESSAGE from_id:chat.admin_id to_id:[TL_peerSecret createWithChat_id:chat.n_id] date:[[MTNetwork instance] getTime] action:[TL_messageActionEncryptedChat createWithTitle:title] fakeId:[MessageSender getFakeMessageId] randomId:rand_long() dstate:DeliveryStatePending];
+    TL_localMessageService *msg = [TL_localMessageService createWithFlags:TGNOFLAGSMESSAGE n_id:[MessageSender getFutureMessageId] from_id:chat.admin_id to_id:[TL_peerSecret createWithChat_id:chat.n_id] reply_to_msg_id:0 date:[[MTNetwork instance] getTime] action:[TL_messageActionEncryptedChat createWithTitle:title] fakeId:[MessageSender getFakeMessageId] randomId:rand_long() dstate:DeliveryStatePending];
     [MessagesManager addAndUpdateMessage:msg];
 }
 
@@ -319,6 +621,10 @@
     [[NSUserDefaults standardUserDefaults] setObject:@(++msgId) forKey:@"store_secret_message_id"];
     [[NSUserDefaults standardUserDefaults] synchronize];
     return (int) msgId;
+}
+
++(int)getCurrentSecretMessageId {
+    return (int) [[NSUserDefaults standardUserDefaults] integerForKey:@"store_secret_message_id"];
 }
 
 
@@ -368,17 +674,17 @@
             
             [params save];
             
-            TL_conversation *dialog = [TL_conversation createWithPeer:[TL_peerSecret createWithChat_id:params.n_id] top_message:-1 unread_count:0 last_message_date:[[MTNetwork instance] getTime] notify_settings:[TL_peerNotifySettingsEmpty create] last_marked_message:0 top_message_fake:-1 last_marked_date:[[MTNetwork instance] getTime] sync_message_id:0 ];
+            TL_conversation *dialog = [TL_conversation createWithFlags:0 peer:[TL_peerSecret createWithChat_id:params.n_id] top_message:-1 unread_count:0 last_message_date:[[MTNetwork instance] getTime] notify_settings:[TL_peerNotifySettingsEmpty create] last_marked_message:0 top_message_fake:-1 last_marked_date:[[MTNetwork instance] getTime] sync_message_id:0 read_inbox_max_id:0 read_outbox_max_id:0 draft:[TL_draftMessageEmpty create] lastMessage:nil];
             
             [[DialogsManager sharedManager] insertDialog:dialog];
             
-            [Notification perform:DIALOG_TO_TOP data:@{KEY_DIALOG:dialog}];
+            [[DialogsManager sharedManager] notifyAfterUpdateConversation:dialog];
             
           //  [MessageSender insertEncryptedServiceMessage:NSLocalizedString(@"MessageAction.Secret.CreatedSecretChat", nil) chat:response];
          
             dispatch_async(dispatch_get_main_queue(), ^{
                 if(callback) callback();
-                [[Telegram sharedInstance] showMessagesFromDialog:dialog sender:self];
+                [appWindow().navigationController showMessagesViewController:dialog];
             });
             
         } errorHandler:^(RPCRequest *request, RpcError *error) {
@@ -393,7 +699,7 @@
 
 static NSMutableArray *wrong_files;
 
-+ (void)sendFilesByPath:(NSArray *)files dialog:(TL_conversation *)dialog isMultiple:(BOOL)isMultiple asDocument:(BOOL)asDocument {
++ (void)sendFilesByPath:(NSArray *)files dialog:(TL_conversation *)dialog isMultiple:(BOOL)isMultiple asDocument:(BOOL)asDocument messagesViewController:(MessagesViewController *)messagesViewController {
    
     
    
@@ -422,7 +728,7 @@ static NSMutableArray *wrong_files;
       
         if(files.count > 0) {
             
-            [self sendFilesByPath:files dialog:dialog isMultiple:isMultiple asDocument:asDocument];
+            [self sendFilesByPath:files dialog:dialog isMultiple:isMultiple asDocument:asDocument messagesViewController:messagesViewController];
         }
             
         
@@ -435,9 +741,19 @@ static NSMutableArray *wrong_files;
     if([[NSFileManager defaultManager] fileExistsAtPath:file isDirectory:&isDir]) {
         if(isDir) {
             
-            next();
+#ifdef TGDEBUG
+            confirm(NSLocalizedString(@"SendMessage.FolderFound",nil),NSLocalizedString(@"SendMessage.FolderFoundDesc",nil),^{
+                [messagesViewController sendFolder:file forConversation:messagesViewController.conversation];
+                next();
+            },^{
+                next();
+            });
             
+#else
+            next();
+#endif
             return;
+            
         }
         
     } else {
@@ -456,29 +772,28 @@ static NSMutableArray *wrong_files;
     }
     
     if([imageTypes() containsObject:pathExtension] && !asDocument) {
-        [[[Telegram rightViewController] messagesViewController]
-         sendImage:file forConversation:dialog file_data:nil isMultiple:isMultiple addCompletionHandler:nil];
+        [messagesViewController sendImage:file forConversation:dialog file_data:nil isMultiple:isMultiple addCompletionHandler:nil];
         next();
         return;
         
     }
     
     if([videoTypes() containsObject:pathExtension] && !asDocument) {
-        [[[Telegram rightViewController] messagesViewController]
-         sendVideo:file forConversation:dialog];
+        [messagesViewController sendVideo:file forConversation:dialog];
          next();
        
         return;
     }
     
-    [[[Telegram rightViewController] messagesViewController]
-     sendDocument:file forConversation:dialog];
+    [messagesViewController sendDocument:file forConversation:dialog];
     next();
     
 }
 
-+(BOOL)sendDraggedFiles:(id <NSDraggingInfo>)sender dialog:(TL_conversation *)dialog asDocument:(BOOL)asDocument {
++(BOOL)sendDraggedFiles:(id <NSDraggingInfo>)sender dialog:(TL_conversation *)dialog asDocument:(BOOL)asDocument  messagesViewController:(MessagesViewController *)messagesViewController {
     NSPasteboard *pboard;
+    
+    [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
     
     if(![dialog canSendMessage])
         return NO;
@@ -488,13 +803,13 @@ static NSMutableArray *wrong_files;
     if ( [[pboard types] containsObject:NSFilenamesPboardType] ) {
         NSArray *files = [pboard propertyListForType:NSFilenamesPboardType];
         BOOL isMultiple = [files filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.pathExtension.lowercaseString IN (%@)",imageTypes()]].count > 1;
-        [self sendFilesByPath:files dialog:dialog isMultiple:isMultiple asDocument:asDocument];
+        [self sendFilesByPath:files dialog:dialog isMultiple:isMultiple asDocument:asDocument messagesViewController:messagesViewController];
         
     } else if([[pboard types] containsObject:NSTIFFPboardType]) {
         NSData *tiff = [pboard dataForType:NSTIFFPboardType];
         
         if(!asDocument) {
-            [[[Telegram rightViewController] messagesViewController]
+            [messagesViewController
              sendImage:nil forConversation:dialog file_data:tiff];
         } else {
             
@@ -502,13 +817,372 @@ static NSMutableArray *wrong_files;
             
             [tiff writeToFile:path atomically:YES];
             
-            [[Telegram rightViewController].messagesViewController sendDocument:path forConversation:[Telegram conversation]];
+        [messagesViewController sendDocument:path forConversation:dialog];
         }
         
         
     }
     
     return YES;
+}
+
+
+static TGLocationRequest *locationRequest;
+
+
+
++(RPCRequest *)proccessInlineKeyboardButton:(TLKeyboardButton *)keyboard messagesViewController:(MessagesViewController *)messagesViewController conversation:(TL_conversation *)conversation message:(TL_localMessage *)message handler:(void (^)(TGInlineKeyboardProccessType type))handler {
+    
+    
+    if([keyboard isKindOfClass:[TL_keyboardButtonCallback class]] || [keyboard isKindOfClass:[TL_keyboardButtonGame class]]) {
+        
+        handler(TGInlineKeyboardProccessingType);
+        
+        return [RPCRequest sendRequest:[TLAPI_messages_getBotCallbackAnswer createWithFlags:(keyboard.data ? (1 << 0) : 0) | ([keyboard isKindOfClass:[TL_keyboardButtonGame class]] ? (1 << 1) : 0) peer:conversation.inputPeer msg_id:message.n_id data:keyboard.data] successHandler:^(id request, TL_messages_botCallbackAnswer *response) {
+            
+            if([response isKindOfClass:[TL_messages_botCallbackAnswer class]] && response.message.length > 0) {
+                if(response.isAlert)
+                    alert(appName(), response.message);
+                else
+                    if(response.message.length > 0)
+                        [Notification perform:SHOW_ALERT_HINT_VIEW data:@{@"text":response.message,@"color":BLUE_COLOR}];
+            } else if([response isKindOfClass:[TL_messages_botCallbackAnswer class]] && response.url.length > 0) {
+                
+                if ([response.url rangeOfString:@"telegram.me"].location != NSNotFound) {
+                    open_link(response.url);
+                } else {
+                    TLUser *user = message.via_bot_id != 0 ? message.via_bot_user : message.fromUser;
+                    
+                    dispatch_block_t block = ^{
+                        TGWebgameViewController *game = [[TGWebgameViewController alloc] init];
+                        
+                        [game startWithUrl:response.url bot:user keyboard:keyboard message:message];
+                        
+                        [appWindow().navigationController pushViewController:game animated:YES];
+                    };
+                    
+                    if (user.isVerified) {
+                        block();
+                    } else {
+                        
+                        NSString *key = [NSString stringWithFormat:@"accept_bot_sharing_%d",user.n_id];
+                        
+                        BOOL accept = [[NSUserDefaults standardUserDefaults] boolForKey:key];
+                        
+                        if (accept) {
+                            block();
+                        } else {
+                            confirm(appName(), [NSString stringWithFormat:NSLocalizedString(@"BotSharingAlert", nil),user.fullName], ^{
+                                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:key];
+                                block();
+                            }, nil);
+                        }
+                    }
+                    
+                    
+                }
+               
+               
+                
+            }
+            
+            handler(TGInlineKeyboardSuccessType);
+            
+            
+        } errorHandler:^(id request, RpcError *error) {
+            handler(TGInlineKeyboardErrorType);
+        }];
+        
+    } else if([keyboard isKindOfClass:[TL_keyboardButtonUrl class]]) {
+        
+        if([keyboard.url rangeOfString:@"telegram.me/"].location != NSNotFound || [keyboard.url hasPrefix:@"tg://"]) {
+            open_link(keyboard.url);
+        } else {
+            TLUser *user = message.via_bot_id != 0 ? message.via_bot_user : message.fromUser;
+            if (user.isVerified) {
+                open_link(keyboard.url);
+            } else {
+                confirm(appName(), [NSString stringWithFormat:NSLocalizedString(@"Link.ConfirmOpenExternalLink", nil),keyboard.url], ^{
+                    open_link(keyboard.url);
+                }, nil);
+            }
+            
+        }
+        
+        
+        handler(TGInlineKeyboardSuccessType);
+        
+    } else if([keyboard isKindOfClass:[TL_keyboardButtonRequestGeoLocation class]]) {
+        
+        [SettingsArchiver requestPermissionWithKey:kPermissionInlineBotGeo peer_id:conversation.peer_id handler:^(bool success) {
+            
+            if(success) {
+                
+                handler(TGInlineKeyboardProccessingType);
+                
+                locationRequest = [[TGLocationRequest alloc] init];
+                
+                [locationRequest startRequestLocation:^(CLLocation *location) {
+                    
+                    [messagesViewController sendLocation:location.coordinate forConversation:conversation];
+                    
+                    handler(TGInlineKeyboardSuccessType);
+                    
+                } failback:^(NSString *error) {
+                    
+                    handler(TGInlineKeyboardErrorType);
+                    
+                    alert(appName(), error);
+                    
+                }];
+                
+            } else {
+                handler(TGInlineKeyboardErrorType);
+            }
+            
+        }];
+        
+        
+    } else if([keyboard isKindOfClass:[TL_keyboardButtonRequestPhone class]]) {
+        
+        
+        [SettingsArchiver requestPermissionWithKey:kPermissionInlineBotContact peer_id:conversation.peer_id handler:^(bool success) {
+            
+            if(success) {
+                
+                [messagesViewController shareContact:[UsersManager currentUser] forConversation:conversation callback:nil];
+                
+                handler(TGInlineKeyboardSuccessType);
+            }
+            
+        }];
+        
+    } else if([keyboard isKindOfClass:[TL_keyboardButton class]]) {
+        [messagesViewController sendMessage:keyboard.text forConversation:conversation];
+        
+        handler(TGInlineKeyboardSuccessType);
+    } else if([keyboard isKindOfClass:[TL_keyboardButtonSwitchInline class]]) {
+        
+        if(keyboard.isSame_peer) {
+            TLUser *user = message.via_bot_id != 0 ? message.via_bot_user : message.fromUser;
+
+            
+            TGInputMessageTemplate *template = [TGInputMessageTemplate templateWithType:TGInputMessageTemplateTypeSimpleText ofPeerId:conversation.peer_id];
+            
+            if([conversation.chat isKindOfClass:[TLChat class]]) {
+                [template setReplyMessage:message save:YES];
+            }
+            
+            [template updateTextAndSave:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"@%@ %@",user.username, keyboard.query]]];
+            [template performNotification];
+        } else {
+            if(messagesViewController.class == [TGContextMessagesvViewController class]) {
+                
+                TGContextMessagesvViewController *m = (TGContextMessagesvViewController *)messagesViewController;
+                
+                [m.contextModalView didNeedCloseAndSwitch:keyboard];
+            } else {
+                
+                TLUser *user = message.via_bot_id != 0 ? message.via_bot_user : message.fromUser;
+                
+                [[Telegram rightViewController] showInlineBotSwitchModalView:user query:[NSString stringWithFormat:@"@%@ %@",user.username, keyboard.query]];
+            }
+        }
+        
+    }
+    
+    return nil;
+}
+
++(SSignal *)addStickerPack:(TL_messages_stickerSet *)pack {
+    
+    return [[SSignal alloc] initWithGenerator:^id<SDisposable>(SSubscriber * subscriber) {
+        
+         RPCRequest *request = [RPCRequest sendRequest:[TLAPI_messages_installStickerSet createWithStickerset:[TL_inputStickerSetID createWithN_id:pack.set.n_id access_hash:pack.set.access_hash] archived:NO] successHandler:^(id request, TLmessages_StickerSetInstallResult *response) {
+            
+             
+             NSMutableArray<TL_stickerSetCovered *> *copysets = [response.sets mutableCopy];
+            
+            [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction * _Nonnull transaction) {
+                
+                NSDictionary *info  = [transaction objectForKey:@"modern_stickers2" inCollection:STICKERS_COLLECTION];
+                
+                NSMutableDictionary *stickers = info[@"serialized"];
+                
+                
+                NSMutableArray *sets = info[@"sets"];
+                
+                [sets addObject:pack.set];
+                stickers[@(pack.set.n_id)] = pack.documents;
+                
+                
+                if([response isKindOfClass:[TL_messages_stickerSetInstallResultArchive class]]) {
+                    
+                    [response.sets enumerateObjectsUsingBlock:^(TL_stickerSetCovered *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                        [stickers removeObjectForKey:@(obj.set.n_id)];
+                    }];
+                    
+                    NSMutableArray *removed = [NSMutableArray array];
+                    
+                    [sets enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(TL_stickerSet *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                        
+                        __block TLStickerSet * changedSet = nil;
+                        
+                        [response.sets enumerateObjectsUsingBlock:^(TL_stickerSetCovered * archived, NSUInteger idx, BOOL * _Nonnull stop) {
+                            if(obj.n_id == archived.set.n_id) {
+                            
+                                changedSet = archived.set;
+                                [removed addObject:obj];
+                            }
+                        }];
+                        
+                        if(changedSet) {
+                            [response.sets removeObject:changedSet];
+                            
+                            *stop = response.sets.count == 0;
+                        }
+                        
+                    }];
+                    
+                    [sets removeObjectsInArray:removed];
+                    
+                }
+                
+                [transaction setObject:info forKey:@"modern_stickers2" inCollection:STICKERS_COLLECTION];
+                
+            }];
+             
+             
+             [ASQueue dispatchOnMainQueue:^{
+                 if([response isKindOfClass:[TL_messages_stickerSetInstallResultArchive class]]) {
+                     [Notification perform:ARCHIVE_STICKERS_CHANGED data:@{KEY_STICKERSET:copysets}];
+                     
+                     [TMViewController hideModalProgress];
+                     
+                     TGModalArchivedPacks *archived = [[TGModalArchivedPacks alloc] initWithFrame:NSZeroRect];
+                     [archived show:appWindow() animated:YES sets:copysets];
+                 } else {
+                     [TMViewController hideModalProgressWithSuccess];
+                 }
+             }];
+             
+             
+             
+            
+            [TGModernESGViewController reloadStickers];
+            
+            [subscriber putNext:@(YES)];
+            
+        } errorHandler:^(id request, RpcError *error) {
+            [TMViewController hideModalProgress];
+            
+            [subscriber putNext:@(NO)];
+        } timeout:10];
+        
+        
+        return [[SBlockDisposable alloc] initWithBlock:^{
+            [request cancelRequest];
+        }];
+    }];
+    
+    
+
+}
+
++(void)addRecentSticker:(TLDocument *)sticker {
+    [[Storage yap] asyncReadWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
+        
+         NSMutableDictionary *useCount = [transaction objectForKey:@"recentStickers" inCollection:STICKERS_COLLECTION];
+        
+        if(!useCount)
+        {
+            useCount = [[NSMutableDictionary alloc] init];
+        }
+        
+        TL_documentAttributeSticker *attr = sticker.stickerAttr;
+        
+        
+        if(!useCount[@(attr.stickerset.n_id)]) {
+            useCount[@(attr.stickerset.n_id)] = [NSMutableDictionary dictionary];
+        }
+        
+        __block int max = 1;
+        
+        [useCount enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, NSMutableDictionary *obj, BOOL * _Nonnull stop) {
+            
+            [obj enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, NSNumber *value, BOOL * _Nonnull stop) {
+                
+                max = MAX(max,[value intValue]);
+                
+            }];
+            
+        }];
+        
+        max++;
+        useCount[@(attr.stickerset.n_id)][@(sticker.n_id)] = @(max);
+        [transaction setObject:useCount forKey:@"recentStickers" inCollection:STICKERS_COLLECTION];
+        
+       
+        
+        
+        NSMutableArray *sc = [transaction objectForKey:@"remoteRecentStickers" inCollection:STICKERS_COLLECTION];
+        
+        if(!sc) {
+            sc = [NSMutableArray array];
+        }
+        
+        __block TLDocument *hasSticker = sticker;
+        
+        [sc enumerateObjectsUsingBlock:^(TLDocument *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            if(obj.n_id == sticker.n_id) {
+                hasSticker = obj;
+                *stop = YES;
+            }
+        }];
+        
+        if([sc indexOfObject:hasSticker] != NSNotFound) {
+            [sc removeObject:hasSticker];
+        }
+        
+        [sc insertObject:hasSticker atIndex:0];
+        
+        [transaction setObject:sc forKey:@"remoteRecentStickers" inCollection:STICKERS_COLLECTION];
+        
+        [Notification perform:STICKERS_REORDER data:@{}];
+        
+        
+    }];
+    
+}
+
++(void)addServiceNotification:(NSString *)message {
+    
+    
+    __block TLUser *user = [[UsersManager sharedManager] find:777000];
+    
+    dispatch_block_t complete = ^{
+        if(user) {
+            TL_conversation *conversation = [[DialogsManager sharedManager] find:user.n_id];
+            
+            if(!conversation)
+                conversation = [[Storage manager] selectConversation:[TL_peerUser createWithUser_id:777000]];
+            if(!conversation)
+                conversation = user.dialog;
+            
+            
+            TL_localMessage *msg = [TL_localMessage createWithN_id:0 flags:TGUNREADMESSAGE from_id:777000 to_id:[TL_peerUser createWithUser_id:[UsersManager currentUserId]] fwd_from:nil reply_to_msg_id:0 date:[[MTNetwork instance] getTime] message:message media:[TL_messageMediaEmpty create] fakeId:[MessageSender getFakeMessageId] randomId:rand_long() reply_markup:nil entities:nil views:0 via_bot_id:0 edit_date:0 isViewed:YES state:DeliveryStateNormal];
+            
+            [MessagesManager addAndUpdateMessage:msg];
+        }
+    };
+    
+    if(!user) {
+        [[NewContactsManager sharedManager] importContact:[TL_inputPhoneContact createWithClient_id:rand_long() phone:@"42777" first_name:@"Telegram" last_name:@"Notifications"] callback:^(BOOL isAdd, TL_importedContact *contact, TLUser *importedUser) {
+            user = importedUser;
+            complete();
+        }];
+    } else
+        complete();
 }
 
 

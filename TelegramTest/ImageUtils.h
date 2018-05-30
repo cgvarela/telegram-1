@@ -19,17 +19,11 @@ CACHE_IMAGE(AddSharedContact)
 CACHE_IMAGE(AddSharedContactHighlighted)
 CACHE_IMAGE(AppIcon)
 CACHE_IMAGE(AttachFile)
-CACHE_IMAGE(AttachFileHighlighted)
-CACHE_IMAGE(AttachHighlighted)
 CACHE_IMAGE(AttachLocation)
-CACHE_IMAGE(AttachLocationHighlighted)
 CACHE_IMAGE(AttachPhotoVideo)
-CACHE_IMAGE(AttachPhotoVideoHighlighted)
 CACHE_IMAGE(AttachTakePhoto)
-CACHE_IMAGE(AttachTakePhotoHighlighted)
 CACHE_IMAGE(BottomAttach)
 CACHE_IMAGE(boxBack)
-CACHE_IMAGE(CancelDownload)
 CACHE_IMAGE(chat)
 CACHE_IMAGE(chatHighlighted)
 CACHE_IMAGE(ChatMessageError)
@@ -64,9 +58,7 @@ CACHE_IMAGE(iconCancelDownload)
 CACHE_IMAGE(kick)
 CACHE_IMAGE(logo)
 CACHE_IMAGE(logoAbout)
-CACHE_IMAGE(MessageFile)
-CACHE_IMAGE(MessageFileCancel)
-CACHE_IMAGE(MessageFileDownload)
+
 CACHE_IMAGE(MessageMapPin)
 CACHE_IMAGE(muted)
 CACHE_IMAGE(mutedSld)
@@ -80,19 +72,11 @@ CACHE_IMAGE(secretHiglighted)
 CACHE_IMAGE(select)
 CACHE_IMAGE(selectPopup)
 CACHE_IMAGE(smile)
-CACHE_IMAGE(smileActive)
-CACHE_IMAGE(smileHover)
 CACHE_IMAGE(typingGIF)
 CACHE_IMAGE(unchecked)
 CACHE_IMAGE(uncheckedHover)
 CACHE_IMAGE(UnpinPhoto)
-CACHE_IMAGE(VideoPlay)
-CACHE_IMAGE(VoiceMessageCancel)
-CACHE_IMAGE(VoiceMessageDownload)
 CACHE_IMAGE(ScrollDownArrow)
-CACHE_IMAGE(VoiceMessagePause)
-CACHE_IMAGE(VoiceMessagePlay)
-CACHE_IMAGE(VoiceMessageUpload)
 CACHE_IMAGE(VoiceMic)
 CACHE_IMAGE(VoiceMicHighlighted)
 CACHE_IMAGE(VoiceMicHighlighted2)
@@ -103,8 +87,8 @@ CACHE_IMAGE(newConversationBroadcast)
 CACHE_IMAGE(PlayButtonBig)
 CACHE_IMAGE(ArrowWhite)
 CACHE_IMAGE(ArrowGrey)
-
-
+CACHE_IMAGE(Verify)
+CACHE_IMAGE(VerifyWhite)
 CACHE_IMAGE(DownloadIconGrey)
 CACHE_IMAGE(DownloadIconWhite)
 CACHE_IMAGE(DownloadPauseIconGrey)
@@ -184,10 +168,19 @@ CACHE_IMAGE(AudioPlayerNext);
 CACHE_IMAGE(AudioPlayerPause);
 CACHE_IMAGE(AudioPlayerClose);
 CACHE_IMAGE(AudioPlayerStop);
-CACHE_IMAGE(MiniPlayerDefaultCover);
 CACHE_IMAGE(AudioPlayerList);
 CACHE_IMAGE(AudioPlayerListActive);
 CACHE_IMAGE(MusicStandartCover);
+
+CACHE_IMAGE(InlineAudioPlayerBack);
+CACHE_IMAGE(InlineAudioPlayerPlay);
+CACHE_IMAGE(InlineAudioPlayerNext);
+CACHE_IMAGE(InlineAudioPlayerPause);
+
+CACHE_IMAGE(InlineAudioPlayerBackHover);
+CACHE_IMAGE(InlineAudioPlayerPlayHover);
+CACHE_IMAGE(InlineAudioPlayerNextHover);
+CACHE_IMAGE(InlineAudioPlayerPauseHover);
 
 CACHE_IMAGE(botCommand);
 CACHE_IMAGE(botKeyboard);
@@ -201,6 +194,67 @@ CACHE_IMAGE(SearchUpDisabled);
 CACHE_IMAGE(SearchDownDisabled);
 CACHE_IMAGE(SearchUp);
 CACHE_IMAGE(SearchDown);
+
+CACHE_IMAGE(ZoomIn);
+CACHE_IMAGE(ZoomOut);
+CACHE_IMAGE(Camera);
+
+CACHE_IMAGE(ChannelMessageAsAdmin);
+CACHE_IMAGE(ChannelMessageAsAdminHighlighted);
+CACHE_IMAGE(ChannelViews);
+
+CACHE_IMAGE(PinConversation);
+CACHE_IMAGE(PinnedConversation);
+
+CACHE_IMAGE(ModernConversationSecretAccessoryTimer);
+
+CACHE_IMAGE(ChannelShare);
+
+CACHE_IMAGE(ModernMenuDeleteIcon);
+CACHE_IMAGE(EditPhotoCamera);
+CACHE_IMAGE(NoSharedLinks);
+
+CACHE_IMAGE(StickerSettings);
+
+CACHE_IMAGE(emojiContainer8);
+CACHE_IMAGE(emojiContainer8Highlighted);
+
+CACHE_IMAGE(CalendarIcon);
+
+CACHE_IMAGE(TempAudioPreviewPlay);
+CACHE_IMAGE(TempAudioPreviewPause);
+
+CACHE_IMAGE(ConversationInputFieldBroadcastIconActive);
+CACHE_IMAGE(ConversationInputFieldBroadcastIconInactive);
+
+CACHE_IMAGE(ModernMessageCheckmark1);
+CACHE_IMAGE(ModernMessageCheckmark2);
+
+CACHE_IMAGE(bot_inline_keyboard_url);
+
+CACHE_IMAGE(bot_inline_button_url);
+
+CACHE_IMAGE(ModernMessageLocationPin);
+
+CACHE_IMAGE(share_inline_bot);
+CACHE_IMAGE(draftIcon);
+CACHE_IMAGE(AudioPlayerVisibility);
+CACHE_IMAGE(AudioPlayerVisibilityActive);
+CACHE_IMAGE(ic_send);
+
+CACHE_IMAGE(Player_Repeat);
+CACHE_IMAGE(Player_RepeatActive);
+CACHE_IMAGE(StickerLink);
+CACHE_IMAGE(emojiGifContainer);
+CACHE_IMAGE(MusicStandartCover_Active);
+
+CACHE_IMAGE(pip_on);
+CACHE_IMAGE(pip_off);
+
+CACHE_IMAGE(Folder);
+CACHE_IMAGE(trending);
+CACHE_IMAGE(chat_pinned);
+
 @interface ImageUtils : NSObject
 
 
@@ -234,5 +288,26 @@ NSData *pngNormalizedData(NSImage *image);
 NSImage *decompressedImage(NSImage *image);
 NSImage *renderedImage(NSImage * oldImage, NSSize size);
 NSImage *cropImage(NSImage *image,NSSize backSize, NSPoint difference);
+
+
++ (NSImage *) roundedImage:(NSImage *)oldImage size:(NSSize)size;
++ (NSImage *) roundedImageNew:(NSImage *)oldImage size:(NSSize)size;
+
+typedef NSImage * (^ImageProcessor)(NSImage *image, NSSize size);
+
++(ImageProcessor)c_processor;
++(ImageProcessor)b_processor;
+
+NSImage *gray_resizable_placeholder();
+NSImage *gray_circle_resizable_placeholder();
+
+NSImage *voice_play_image();
+NSImage *play_image();
+NSImage *gray_circle_background_image();
+NSImage *blue_circle_background_image();
+NSImage *attach_downloaded_background();
+NSImage *white_background_color();
+NSImage *video_play_image();
+float scaleFactor();
 
 @end

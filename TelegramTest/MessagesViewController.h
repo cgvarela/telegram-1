@@ -11,12 +11,12 @@
 #import "UploadOperation.h"
 #import "TMElements.h"
 #import "MessagesDelegate.h"
-#import "MessageInputGrowingTextView.h"
 #import "ConnectionStatusViewControllerView.h"
 #import <CoreLocation/CoreLocation.h>
 #import "TGCTextMark.h"
-
-@class MessagesBottomView;
+#import "TGMessagesHintView.h"
+#import "TGCompressItem.h"
+#import "TGInputMessageTemplate.h"
 
 @interface SearchSelectItem : NSObject
 @property (nonatomic,assign) BOOL isCurrent;
@@ -33,14 +33,22 @@
 typedef enum {
     MessagesViewControllerStateNone,
     MessagesViewControllerStateEditable,
-    MessagesViewControllerStateFiltred
+    MessagesViewControllerStateFiltred,
+    MessagesViewControllerStateEditMessage
 } MessagesViewControllerState;
 
 @property (nonatomic, strong) NSMutableArray *selectedMessages;
 @property (nonatomic, strong,readonly) MessagesTableView *table;
-@property (nonatomic, strong) MessagesBottomView *bottomView;
+@property (nonatomic,strong,readonly) TGInputMessageTemplate * editTemplate;
 
 
+typedef enum {
+    ShowMessageTypeReply = 1 << 0,
+    ShowMessageTypeSearch = 1 << 1,
+    ShowMessageTypeUnreadMark = 1 << 2,
+    ShowMessageTypeDateJump = 1 << 3,
+    ShowMessageTypeSaveScrolled = 1 << 4
+} ShowMessageType;
 
 
 -(void)setConversation:(TL_conversation *)conversation;
@@ -51,36 +59,48 @@ typedef enum {
 @property (nonatomic,copy) dispatch_block_t didUpdatedTable;
 
 - (void)sendTypingWithAction:(TLSendMessageAction *)action;
-- (void)sendMessage;
+
 - (void)setCellsEditButtonShow:(BOOL)show animated:(BOOL)animated;
 - (void)setSelectedMessage:(MessageTableItem *)item selected:(BOOL)selected;
 - (void)deleteSelectedMessages;
-- (void)cancelSelectionAndScrollToBottom;
+- (void) deleteSelectedMessages:(dispatch_block_t)deleteAcceptBlock;
+- (void)cancelSelectionAndScrollToBottom:(BOOL)scrollToBottom;
 - (void)unSelectAll:(BOOL)animated;
 - (void)bottomViewChangeSize:(int)height animated:(BOOL)animated;
-- (void)setStringValueToTextField:(NSString *)stringValue;
-- (NSString *)inputText;
+
+- (int)attachmentsCount;
+
+- (void)showForwardMessagesModalView;
+
+
+- (void)sendMessage;
+
 - (void)drop;
 
 //- (void)updateHeaderHeight:(BOOL)update animated:(BOOL)animated;
-- (void)jumpToLastMessages;
-- (void)saveInputText;
+- (void)jumpToLastMessages:(BOOL)force;
+- (void)recommendStickers;
 
-- (void)setCurrentConversation:(TL_conversation *)dialog withJump:(int)messageId historyFilter:(Class)historyFilter;
-- (void)setCurrentConversation:(TL_conversation *)dialog withJump:(int)messageId historyFilter:(Class)historyFilter force:(BOOL)force;
+- (void)setCurrentConversation:(TL_conversation *)dialog withMessageJump:(TL_localMessage *)message;
+- (void)setCurrentConversation:(TL_conversation *)dialog withMessageJump:(TL_localMessage *)message force:(BOOL)force;
 - (void)setCurrentConversation:(TL_conversation *)dialog;
 
-- (void)showMessage:(int)messageId fromMsgId:(int)msgId;
-- (void)showMessage:(int)messageId fromMsgId:(int)msgId animated:(BOOL)animated selectText:(NSString *)text;
+
+
+- (void)showMessage:(TL_localMessage *)message fromMsg:(TL_localMessage *)fromMsg flags:(int)flags;
+- (void)showMessage:(TL_localMessage *)message fromMsg:(TL_localMessage *)fromMsg switchDiscussion:(BOOL)switchDiscussion;
+- (void)showMessage:(TL_localMessage *)message fromMsg:(TL_localMessage *)fromMsg animated:(BOOL)animated selectText:(NSString *)text switchDiscussion:(BOOL)switchDiscussion flags:(int)flags;
 
 - (void)setHistoryFilter:(Class)filter force:(BOOL)force;
 - (void)updateLoading;
 - (MessageTableItem *)objectAtIndex:(NSUInteger)position;
 - (NSUInteger)indexOfObject:(MessageTableItem *)item;
-- (MessageTableItem *)itemOfMsgId:(int)msg_id;
+- (MessageTableItem *)itemOfMsgId:(long)msg_id randomId:(long)randomId;
 
 +(NSMenu *)destructMenu:(dispatch_block_t)ttlCallback click:(dispatch_block_t)click;
 +(NSMenu *)notifications:(dispatch_block_t)callback conversation:(TL_conversation *)conversation click:(dispatch_block_t)click;
+
++(BOOL)canDeleteMessages:(NSArray *)messages inConversation:(TL_conversation *)conversation;
 
 - (NSUInteger)messagesCount;
 
@@ -97,11 +117,9 @@ typedef enum {
 
 -(void)showBotStartButton:(NSString *)startParam bot:(TLUser *)bot;
 
--(void)addReplayMessage:(TL_localMessage *)message animated:(BOOL)animated;
--(void)removeReplayMessage:(BOOL)update animated:(BOOL)animated;
 
 
-
+- (void)sendImage:(NSString *)file_path forConversation:(TL_conversation *)conversation file_data:(NSData *)data caption:(NSString *)caption;
 - (void)sendImage:(NSString *)file_path forConversation:(TL_conversation *)conversation file_data:(NSData *)data;
 - (void)sendVideo:(NSString *)file_path forConversation:(TL_conversation *)conversation;
 - (void)sendDocument:(NSString *)file_path forConversation:(TL_conversation *)conversation;
@@ -112,23 +130,33 @@ typedef enum {
 - (void)addImageAttachment:(NSString *)file_path forConversation:(TL_conversation *)conversation file_data:(NSData *)data addCompletionHandler:(dispatch_block_t)completeHandler;
 
 
+- (void)sendVideo:(NSString *)file_path forConversation:(TL_conversation *)conversation caption:(NSString *)caption addCompletionHandler:(dispatch_block_t)completeHandler;
+- (void)sendDocument:(NSString *)file_path forConversation:(TL_conversation *)conversation caption:(NSString *)caption addCompletionHandler:(dispatch_block_t)completeHandler;
+
+
 - (void)sendVideo:(NSString *)file_path forConversation:(TL_conversation *)conversation addCompletionHandler:(dispatch_block_t)completeHandler;
-;
 - (void)sendDocument:(NSString *)file_path forConversation:(TL_conversation *)conversation addCompletionHandler:(dispatch_block_t)completeHandler;
-;
+
+
+- (void)sendFolder:(NSString *)file_path forConversation:(TL_conversation *)conversation;
+
 
 -(void)sendSticker:(TLDocument *)sticker forConversation:(TL_conversation *)conversation addCompletionHandler:(dispatch_block_t)completeHandler;
 
-- (void)sendAudio:(NSString *)file_path forConversation:(TL_conversation *)conversation;
+- (void)sendAudio:(NSString *)file_path forConversation:(TL_conversation *)conversation waveforms:(NSData *)waveforms;
 - (void)sendMessage:(NSString *)message forConversation:(TL_conversation *)conversation;
 - (void)sendLocation:(CLLocationCoordinate2D)coordinates forConversation:(TL_conversation *)conversation;
-- (void)forwardMessages:(NSArray *)messages forConversation:(TL_conversation *)conversation callback:(dispatch_block_t)callback;
+- (void)forwardMessages:(NSArray *)messages conversation:(TL_conversation *)conversation callback:(dispatch_block_t)callback;
 - (void)shareContact:(TLUser *)contact forConversation:(TL_conversation *)conversation callback:(dispatch_block_t)callback;
 - (void)sendSecretTTL:(int)ttl forConversation:(TL_conversation *)conversation;
 - (void)sendSecretTTL:(int)ttl forConversation:(TL_conversation *)conversation callback:(dispatch_block_t)callback;
+- (void)sendFoundGif:(TLMessageMedia *)media forConversation:(TL_conversation *)conversation;
+- (void)sendCompressedItem:(TGCompressItem *)compressedItem;
+- (void)sendContextBotResult:(TLBotInlineResult *)botContextResult via_bot_id:(int)via_bot_id via_bot_name:(NSString *)via_bot_name queryId:(long)queryId forConversation:(TL_conversation *)conversation;
+-(void)sendStartBot:(NSString *)startParam forConversation:(TL_conversation *)conversation bot:(TLUser *)bot;
 
 - (NSArray *)messageTableItemsFromMessages:(NSArray *)input;
-
++ (NSArray *)messageTableItemsFromMessages:(NSArray *)input;
 - (void)hideTopInfoView:(BOOL)animated;
 - (void)showTopInfoView:(BOOL)animated;
 
@@ -137,6 +165,8 @@ typedef enum {
 
 -(void)showSearchBox;
 -(BOOL)searchBoxIsVisible;
+-(void)nextSearchResult;
+-(void)prevSearchResult;
 
 -(NSArray *)messageList;
 
@@ -151,9 +181,28 @@ typedef enum {
 -(void)performForward:(TL_conversation *)conversation;
 
 -(void)checkWebpage:(NSString *)link;
--(void)removeWebpage;
--(void)updateWebpage;
 
--(void)markAsNoWebpage;
--(BOOL)noWebpage:(NSString *)message;
+
+-(void)showOrHideChannelDiscussion;
+
+-(void)tryRead;
+
+-(BOOL)contextAbility;
+
+-(void)selectInputTextByText:(NSString *)text;
+
+-(TGMessagesHintView *)hintView;
+
+-(void)setEditableMessage:(TL_localMessage *)message;
+-(void)forceSetEditSentMessage:(BOOL)rollback;
+-(TGInputMessageTemplateType)templateType;
+
+-(void)showOrHideESGController:(BOOL)animated toggle:(BOOL)toggle;
+-(BOOL)isShownESGController;
+-(BOOL)canShownESGController;
+
+-(void)paste:(id)sender;
+
+-(BOOL)selectNextStickerIfNeeded;
+-(BOOL)selectPrevStickerIfNeeded;
 @end

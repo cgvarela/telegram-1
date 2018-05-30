@@ -13,6 +13,8 @@
 #import "TGTimer.h"
 #import <AddressBook/AddressBook.h>
 #import "TLUserCategory.h"
+#import "FullUsersManager.h"
+#import "TGSearchSignalKit.h"
 @interface UsersManager ()
 @property (nonatomic, strong) TGTimer *lastSeenUpdater;
 @property (nonatomic, strong) RPCRequest *lastSeenRequest;
@@ -25,6 +27,8 @@
     if(self = [super initWithQueue:queue]) {
         [Notification addObserver:self selector:@selector(protocolUpdated:) name:PROTOCOL_UPDATED];
         [Notification addObserver:self selector:@selector(logoutNotification) name:LOGOUT_EVENT];
+        
+        
     }
     return self;
 }
@@ -41,6 +45,12 @@
 //        [self.lastSeenUpdater start];
       //  [self statusUpdater];
     }];
+}
+
+
+-(void)updateUsers:(NSArray *)userIds {
+    
+    
 }
 
 - (void)statusUpdater {
@@ -62,7 +72,9 @@
     
     self.lastSeenRequest = [RPCRequest sendRequest:[TLAPI_users_getUsers createWithN_id:needUsersUpdate] successHandler:^(RPCRequest *request, NSMutableArray *response) {
         
-        [self add:response withCustomKey:@"n_id" update:YES];
+        [[self add:response autoStart:NO] startWithNext:^(id next) {
+            [[Storage manager] insertUsers:next];
+        }];
         
     } errorHandler:nil];
 }
@@ -108,7 +120,7 @@
     if([userName hasPrefix:@"@"])
         userName = [userName substringFromIndex:1];
     
-    NSArray *users = [[[UsersManager sharedManager] all] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.username == %@",userName]];
+    NSArray *users = [[[UsersManager sharedManager] all] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.username.lowercaseString == %@",[userName lowercaseString]]];
     
     if(users.count == 1)
         return users[0];
@@ -116,7 +128,7 @@
     return nil;
 }
 
-+(NSArray *)findUsersByMention:(NSString *)userName withUids:(NSArray *)uids {
++(NSArray *)findUsersByMention:(NSString *)userName withUids:(NSArray *)uids acceptContextBots:(BOOL)acceptContextBots acceptNonameUsers:(BOOL)acceptNonameUsers {
     if([userName hasPrefix:@"@"])
         userName = [userName substringFromIndex:1];
     
@@ -124,29 +136,37 @@
     NSArray *userNames;
     NSArray *fullName;
     
+    
+    NSArray *filtered;
+    
+    UsersManager *manager = [self sharedManager];
+    
+    if( uids.count > 0)
+       filtered = [manager.all filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:acceptNonameUsers ? @"self.n_id IN %@ and self.isBotInlinePlaceholder == 0" : @"self.n_id IN %@ and self.isBotInlinePlaceholder == 0 and self.username.length > 0",uids]];
+        else
+           filtered = [manager.all filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:acceptNonameUsers ? @"self.isBotInlinePlaceholder == 0" : @"self.isBotInlinePlaceholder == 0 and self.username.length > 0",uids]];
+    
     if(userName.length > 0) {
-        userNames = [[[UsersManager sharedManager] all] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.username BEGINSWITH[c] %@ AND self.n_id IN %@",userName,uids]];
+        userNames = [filtered filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.username BEGINSWITH[c] %@",userName]];
         
         
-        fullName = [[[UsersManager sharedManager] all] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(TLUser *evaluatedObject, NSDictionary *bindings) {
+        fullName = [filtered filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(TLUser *evaluatedObject, NSDictionary *bindings) {
+            BOOL result = [evaluatedObject.fullName searchInStringByWordsSeparated:userName];
             
-            return evaluatedObject.username.length > 0 && [evaluatedObject.fullName searchInStringByWordsSeparated:userName] && [uids indexOfObject:@(evaluatedObject.n_id)] != NSNotFound;
+            if(result && !acceptNonameUsers) {
+                result = result && evaluatedObject.username.length > 0;
+            }
+            
+            return result;
             
         }]];
-    } else {
+    }  else {
+        userNames = filtered;
         
-        userNames = [[[UsersManager sharedManager] all] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(TLUser *evaluatedObject, NSDictionary *bindings) {
-            
-            return evaluatedObject.username.length > 0 && [uids indexOfObject:@(evaluatedObject.n_id)] != NSNotFound;
-            
-        }]];
+        
         
         fullName = @[];
-        
     }
-    
-    
-    
     
     
     NSMutableArray *result = [[NSMutableArray alloc] initWithArray:userNames];
@@ -162,22 +182,23 @@
     [result removeObject:[self currentUser]];
     
     return result;
-
 }
 
-- (void)addFromDB:(NSArray *)array {
-    [self add:array withCustomKey:@"n_id" update:NO];
++(NSArray *)findUsersByMention:(NSString *)userName withUids:(NSArray *)uids {
+   
+    return [self findUsersByMention:userName withUids:uids acceptContextBots:NO acceptNonameUsers:YES];
 }
 
-- (void)add:(NSArray *)all withCustomKey:(NSString *)key {
-    [self add:all withCustomKey:key update:YES];
-}
 
-- (void)add:(NSArray *)all withCustomKey:(NSString *)key update:(BOOL)isNeedUpdateDB {
 
-    [self.queue dispatchOnQueue:^{
+- (SSignal *)add:(NSArray *)all withCustomKey:(NSString *)key autoStart:(BOOL)autoStart {
+    
+    SSignal *signal = [[[SSignal alloc] initWithGenerator:^id<SDisposable>(SSubscriber * subscriber) {
+        
+        __block BOOL dispose = NO;
         
         NSMutableArray *usersToUpdate = [NSMutableArray array];
+        
         
         for (TLUser *newUser in all) {
             TLUser *currentUser = [keys objectForKey:[newUser valueForKey:key]];
@@ -187,10 +208,15 @@
                 newUser.first_name =  NSLocalizedString(@"User.Deleted", nil);
             }
             
+            
             BOOL needUpdateUserInDB = NO;
             if(currentUser) {
                 BOOL isNeedRebuildNames = NO;
                 BOOL isNeedChangeTypeNotify = NO;
+                
+                currentUser.flags = newUser.flags;
+                
+                
                 if(newUser.type != currentUser.type) {
                     [currentUser setType:newUser.type];
                     
@@ -203,15 +229,22 @@
                 if(currentUser.type != TLUserTypeEmpty) {
                     if(![newUser.first_name isEqualToString:currentUser.first_name] || ![newUser.last_name isEqualToString:currentUser.last_name] || ![newUser.username isEqualToString:currentUser.username] || ( newUser.phone && ![newUser.phone isEqualToString:currentUser.phone])) {
                         
-            
-                        currentUser.first_name = newUser.first_name;
-                        currentUser.last_name = newUser.last_name;
-                        currentUser.username = newUser.username;
-                        currentUser.phone = newUser.phone;
+                        if(!newUser.isMin) {
+                            currentUser.first_name = newUser.first_name;
+                            currentUser.last_name = newUser.last_name;
+                            
+                            
+                            currentUser.username = newUser.username;
+                            currentUser.phone = newUser.phone;
+                            
+                        }
+                        
                         
                         isNeedRebuildNames = YES;
                         
                         needUpdateUserInDB = YES;
+                        
+                       
                     }
                 }
                 
@@ -219,15 +252,22 @@
                     currentUser.photo = newUser.photo;
                     
                     PreviewObject *previewObject = [[PreviewObject alloc] initWithMsdId:currentUser.photo.photo_id media:[TL_photoSize createWithType:@"x" location:currentUser.photo.photo_big w:640 h:640 size:0] peer_id:currentUser.n_id];
-
+                    
                     [Notification perform:USER_UPDATE_PHOTO data:@{KEY_USER: currentUser, KEY_PREVIEW_OBJECT:previewObject}];
                     needUpdateUserInDB = YES;
                 }
                 
-                currentUser.access_hash = newUser.access_hash;
+                if(!newUser.isMin) {
+                    
+                    if(currentUser.access_hash != newUser.access_hash)
+                        needUpdateUserInDB = YES;
+                    currentUser.access_hash = newUser.access_hash;
+                    
+                }
                 
-                if(!currentUser.phone || !currentUser.phone.length)
-                    currentUser.phone = newUser.phone;
+                BOOL result = [self setUserStatus:newUser.status forUser:currentUser autoSave:NO];
+                
+                needUpdateUserInDB = needUpdateUserInDB || result;
                 
                 if(isNeedRebuildNames) {
                     [currentUser rebuildNames];
@@ -240,6 +280,7 @@
                 
             } else {
                 
+                
                 if(newUser.type == TLUserTypeEmpty) {
                     newUser.first_name = @"Deleted";
                     newUser.last_name = @"";
@@ -251,16 +292,10 @@
                 [self->keys setObject:newUser forKey:[newUser valueForKey:key]];
                 
                 [newUser rebuildNames];
-                
-                
-                
                 [newUser rebuildType];
                 
-                 currentUser = newUser;
-                if(isNeedUpdateDB) {
-                    currentUser.lastSeenUpdate = [[MTNetwork instance] getTime];
-                }
-
+                currentUser = newUser;
+                
                 
                 needUpdateUserInDB = YES;
             }
@@ -268,34 +303,65 @@
             if(currentUser.type == TLUserTypeSelf)
                 _userSelf = currentUser;
             
-            BOOL result = [self setUserStatus:newUser.status forUser:currentUser];
+            BOOL result = [self setUserStatus:newUser.status forUser:currentUser autoSave:NO];
+           
             if(!needUpdateUserInDB && result) {
                 needUpdateUserInDB = YES;
             }
             
-            if(needUpdateUserInDB && isNeedUpdateDB) {
+            
+            if(needUpdateUserInDB) {
                 [usersToUpdate addObject:newUser];
             }
+            
+            if(dispose)
+                break;
         }
         
         
-        
         if(usersToUpdate.count)
-            [[Storage manager] insertUsers:usersToUpdate completeHandler:nil];
-    }];
+            [subscriber putNext:usersToUpdate];
+        
+        
+        return [[SBlockDisposable alloc] initWithBlock:^
+                {
+                    dispose = YES;
+                }];
+    }] startOn:[ASQueue globalQueue]];
     
+    
+    if(autoStart)
+        [signal startWithNext:^(id next) {
+            
+            
+        }];
+    
+    
+    return signal;
+
 }
 
-- (BOOL)setUserStatus:(TLUserStatus *)status forUser:(TLUser *)currentUser {
+
+- (BOOL)setUserStatus:(TLUserStatus *)status forUser:(TLUser *)currentUser autoSave:(BOOL)autoSave {
     
-    BOOL result = currentUser.status.expires != status.expires && currentUser.status.was_online != status.was_online && currentUser.status.class != status.class;
+    BOOL result = (currentUser.status.expires != status.expires || currentUser.status.was_online != status.was_online) || currentUser.status.class != status.class;
+    
+    BOOL saveOnlyTime = currentUser.status.class == status.class || (([currentUser.status isKindOfClass:[TL_userStatusOnline class]] || [currentUser.status isKindOfClass:[TL_userStatusOffline class]])  && ([status isKindOfClass:[TL_userStatusOnline class]] || [status isKindOfClass:[TL_userStatusOffline class]]));
     
     currentUser.status = status;
     currentUser.lastSeenUpdate = [[MTNetwork instance] getTime];
-    currentUser.status.was_online = status.was_online;
-    currentUser.status.expires = status.expires;
+
+    if(result)
+        [Notification perform:USER_STATUS data:@{KEY_USER_ID: @(currentUser.n_id)}];
     
-    [Notification perform:USER_STATUS data:@{KEY_USER_ID: @(currentUser.n_id)}];
+    
+    if(result && autoSave) {
+        if(saveOnlyTime) {
+            [[Storage manager] updateUsersStatus:@[currentUser]];
+        } else {
+             [[Storage manager] insertUser:currentUser];
+        }
+    }
     
     return result;
 }
@@ -304,10 +370,7 @@
     [self.queue dispatchOnQueue:^{
         TLUser *currentUser = [keys objectForKey:@(uid)];
         if(currentUser) {
-            BOOL result = [self setUserStatus:status forUser:currentUser];
-            if(result) {
-                [[Storage manager] insertUser:currentUser completeHandler:nil];
-            }
+            [self setUserStatus:status forUser:currentUser autoSave:YES];
         }
     }];
 }
@@ -347,26 +410,29 @@
     
     [RPCRequest sendRequest:[TLAPI_account_updateUsername createWithUsername:userName] successHandler:^(RPCRequest *request, TLUser *response) {
         
-        [self.queue dispatchOnQueue:^{
-            if(response.type == TLUserTypeSelf) {
-                [self add:@[response]];
-            }
-            
-            [[Storage manager] insertUser:self.userSelf completeHandler:nil];
-            
-            [[ASQueue mainQueue] dispatchOnQueue:^{
-                completeHandler(self.userSelf);
-            }];
-            
-            [Notification perform:USER_UPDATE_NAME data:@{KEY_USER:self.userSelf}];
+        if(response.type == TLUserTypeSelf) {
+            [self add:@[response]];
+        }
+        
+        [self.userSelf rebuildNames];
+        
+        [[Storage manager] insertUser:self.userSelf];
+        
+        [ASQueue dispatchOnMainQueue:^{
+            completeHandler(self.userSelf);
         }];
         
-       
+        [Notification perform:USER_UPDATE_NAME data:@{KEY_USER:self.userSelf}];
+
         
      } errorHandler:^(RPCRequest *request, RpcError *error) {
-         if(errorHandler)
-             errorHandler(NSLocalizedString(@"Profile.CantUpdate", nil));
-     } timeout:10];
+         
+         [ASQueue dispatchOnMainQueue:^{
+             if(errorHandler)
+                 errorHandler(NSLocalizedString(@"Profile.CantUpdate", nil));
+         }];
+         
+     } timeout:10 queue:self.queue.nativeQueue];
 }
 
 
@@ -395,20 +461,30 @@
     [Notification perform:USER_UPDATE_NAME data:@{KEY_USER:self.userSelf}];
     
     
-    [RPCRequest sendRequest:[TLAPI_account_updateProfile createWithFirst_name:firstName last_name:lastName] successHandler:^(RPCRequest *request, TLUser *response) {
+    [[FullUsersManager sharedManager] requestUserFull:self.userSelf withCallback:^(TLUserFull *userFull) {
         
-        if(response.type == TLUserTypeSelf) {
-            [self add:@[response]];
-        }
+        int flags = firstName.length > 0 ? (1 << 0) : 0;
+        flags|=(1 << 1);
+        flags|=userFull.about.length > 0 ? (1 << 2) : 0;
         
-        [[Storage manager] insertUser:self.userSelf completeHandler:nil];
-        
-        completeHandler(self.userSelf);
-        [Notification perform:USER_UPDATE_NAME data:@{KEY_USER:self.userSelf}];
-    } errorHandler:^(RPCRequest *request, RpcError *error) {
-        if(errorHandler)
-            errorHandler(NSLocalizedString(@"Profile.CantUpdate", nil));
-    } timeout:10];
+        [RPCRequest sendRequest:[TLAPI_account_updateProfile createWithFlags:flags first_name:firstName last_name:lastName about:userFull.about] successHandler:^(RPCRequest *request, TLUser *response) {
+            
+            if(response.type == TLUserTypeSelf) {
+                [self add:@[response]];
+            }
+            
+            [[Storage manager] insertUser:self.userSelf];
+            
+            completeHandler(self.userSelf);
+            [Notification perform:USER_UPDATE_NAME data:@{KEY_USER:self.userSelf}];
+        } errorHandler:^(RPCRequest *request, RpcError *error) {
+            if(errorHandler)
+                errorHandler(NSLocalizedString(@"Profile.CantUpdate", nil));
+        } timeout:10];
+    }];
+    
+    
+    
 }
 
 -(void)updateAccountPhoto:(NSString *)path completeHandler:(void (^)(TLUser *user))completeHandler progressHandler:(void (^)(float))progressHandler errorHandler:(void (^)(NSString *description))errorHandler {
@@ -416,7 +492,7 @@
     
     [operation setUploadComplete:^(UploadOperation *operation, id input) {
         
-        [RPCRequest sendRequest:[TLAPI_photos_uploadProfilePhoto createWithFile:input caption:@"me" geo_point:[TL_inputGeoPointEmpty create] crop:[TL_inputPhotoCropAuto create]] successHandler:^(RPCRequest *request, id response) {
+        [RPCRequest sendRequest:[TLAPI_photos_uploadProfilePhoto createWithFile:input] successHandler:^(RPCRequest *request, id response) {
             
             [SharedManager proccessGlobalResponse:response];
             
@@ -450,7 +526,7 @@
     
     [operation setUploadComplete:^(UploadOperation *operation, id input) {
         
-        [RPCRequest sendRequest:[TLAPI_photos_uploadProfilePhoto createWithFile:input caption:@"me" geo_point:[TL_inputGeoPointEmpty create] crop:[TL_inputPhotoCropAuto create]] successHandler:^(RPCRequest *request, id response) {
+        [RPCRequest sendRequest:[TLAPI_photos_uploadProfilePhoto createWithFile:input] successHandler:^(RPCRequest *request, id response) {
             
             
             [SharedManager proccessGlobalResponse:response];

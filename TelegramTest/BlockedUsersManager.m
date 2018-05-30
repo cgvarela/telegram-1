@@ -14,7 +14,7 @@
     static BlockedUsersManager *instance;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        instance = [[BlockedUsersManager alloc] initWithQueue:[ASQueue globalQueue]];
+        instance = [[BlockedUsersManager alloc] initWithQueue:[[ASQueue alloc] initWithName:"blockedQueue"]];
     });
     return instance;
 }
@@ -49,11 +49,11 @@
         
         [SharedManager proccessGlobalResponse:response];
         
-        if([response isKindOfClass:[TL_contacts_blockedSlice class]]) {
-            [self _remoteLoadWithOffset:offset + limit limit:limit array:array];
-        } else {
+//        if([response isKindOfClass:[TL_contacts_blockedSlice class]]) {
+//            [self _remoteLoadWithOffset:offset + limit limit:limit array:array];
+//        } else {
             [self _compleRemoteLoad:array];
-        }
+      //  }
     } errorHandler:^(RPCRequest *request, RpcError *error) {
         MTLog(@"RpcError %@", error.error_msg);
     }];
@@ -66,12 +66,35 @@
     [self add:array];
 }
 
-- (void)add:(NSArray *)all {
-    [self.queue dispatchOnQueue:^{
+- (SSignal *)add:(NSArray *)all {
+    
+    SSignal *signal = [[[SSignal alloc] initWithGenerator:^id<SDisposable>(SSubscriber * subscriber) {
+        
+        __block BOOL dispose = NO;
+        
         for (TLContactBlocked *blockedContact in all) {
             [self->keys setObject:blockedContact forKey:@(blockedContact.user_id)];
+            
+            if(dispose)
+                break;
         }
+        
+        [subscriber putNext:nil];
+        
+        
+        return [[SBlockDisposable alloc] initWithBlock:^
+                {
+                    dispose = YES;
+                }];
+    }] startOn:[ASQueue globalQueue]];
+    
+    
+    [signal startWithNext:^(id next) {
+        
     }];
+    
+    return signal;
+    
 }
 
 - (BOOL)isBlocked:(int)user_id {

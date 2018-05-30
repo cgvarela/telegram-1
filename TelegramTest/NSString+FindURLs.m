@@ -25,6 +25,11 @@
     return links;  
 }
 
+-(NSArray *)locationsOfLinks {
+    NSDataDetector *detect = [[NSDataDetector alloc] initWithTypes:1ULL << 5 error:nil];
+    return [detect matchesInString:self options:0 range:NSMakeRange(0, [self length])];
+}
+
 - (NSArray *)locationsOfLinks:(URLFindType)findType
 {
    
@@ -220,17 +225,27 @@
         NSError *error = nil;
         static NSDataDetector *dataDetector = nil;
         if (dataDetector == nil)
-            dataDetector = [NSDataDetector dataDetectorWithTypes:(int)(NSTextCheckingTypeLink | NSTextCheckingTypePhoneNumber) error:&error];
+            dataDetector = [NSDataDetector dataDetectorWithTypes:(int)(NSTextCheckingTypeLink) error:&error];
         
         NSMutableArray *results = [[NSMutableArray alloc] init];
-        [dataDetector enumerateMatchesInString:text options:0 range:NSMakeRange(0, text.length) usingBlock:^(NSTextCheckingResult *match, __unused NSMatchingFlags flags, __unused BOOL *stop)
-         {
-             NSTextCheckingType type = [match resultType];
-             if (type == NSTextCheckingTypeLink || type == NSTextCheckingTypePhoneNumber)
+        @try {
+            [dataDetector enumerateMatchesInString:text options:0 range:NSMakeRange(0, text.length) usingBlock:^(NSTextCheckingResult *match, __unused NSMatchingFlags flags, __unused BOOL *stop)
              {
-                 [results addObject:[NSValue valueWithRange:match.range]];
-             }
-         }];
+                 @try {
+                     NSTextCheckingType type = [match resultType];
+                     if (type == NSTextCheckingTypeLink || type == NSTextCheckingTypePhoneNumber)
+                     {
+                         [results addObject:[NSValue valueWithRange:match.range]];
+                     }
+                 } @catch (NSException *exception) {
+                     
+                 }
+                
+             }];
+        } @catch (NSException *exception) {
+            
+        }
+       
         
         static NSCharacterSet *characterSet = nil;
         static dispatch_once_t onceToken;
@@ -261,7 +276,7 @@
                                 NSRange mentionRange = NSMakeRange(range.location - 1, range.length + 1);
                                 
                                 unichar mentionStartChar = [text characterAtIndex:mentionRange.location + 1];
-                                if (!(mentionRange.length <= 5 || (mentionStartChar >= '0' && mentionStartChar <= '9')))
+                                if (!(mentionRange.length <= 1 || (mentionStartChar >= '0' && mentionStartChar <= '9')))
                                 {
                                     [results addObject:[NSValue valueWithRange:mentionRange]];
                                 }
@@ -319,7 +334,7 @@
                 NSRange range = NSMakeRange(mentionStart + 1, length - mentionStart - 1);
                 NSRange mentionRange = NSMakeRange(range.location - 1, range.length + 1);
                 unichar mentionStartChar = [text characterAtIndex:mentionRange.location + 1];
-                if (!(mentionRange.length <= 5 || (mentionStartChar >= '0' && mentionStartChar <= '9')))
+                if (!(mentionRange.length <= 1 || (mentionStartChar >= '0' && mentionStartChar <= '9')))
                 {
                     [results addObject:[NSValue valueWithRange:mentionRange]];
                 }
@@ -361,6 +376,16 @@
     NSArray *arrayOfLinks = [self arrayOfLinks:[detect matchesInString:self options:0 range:NSMakeRange(0, [self length])]];
     
     return arrayOfLinks.count > 0 ? arrayOfLinks[0] : nil;
+    
+}
+
+
+- (BOOL)isStringWithUrl
+{
+    
+    NSDataDetector *detect = [[NSDataDetector alloc] initWithTypes:1ULL << 5 error:nil];
+    
+    return  [detect matchesInString:self options:0 range:NSMakeRange(0, [self length])].count > 0;
     
 }
 

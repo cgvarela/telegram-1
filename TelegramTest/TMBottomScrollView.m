@@ -7,9 +7,12 @@
 //
 
 #import "TMBottomScrollView.h"
-
+#import "MessageTableItem.h"
+#import "TGCirclularCounter.h"
 @interface TMBottomScrollView ()
-@property (nonatomic, strong) NSAttributedString *messagesCountAttributedString;
+@property (nonatomic,strong) TGCirclularCounter *circularCounter;
+
+
 @end
 
 @implementation TMBottomScrollView
@@ -18,24 +21,82 @@
     self = [super initWithFrame:frame];
     if (self) {
         
+        
+        
         self.layerContentsPlacement = NSViewLayerContentsPlacementScaleAxesIndependently;
         self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawOnSetNeedsDisplay;
         
+        
+        _circularCounter = [[TGCirclularCounter alloc] initWithFrame:NSMakeRect(0, 0, 44, 44)];
+        
+        _circularCounter.textFont = TGSystemFont(13);
+        _circularCounter.textColor = [NSColor whiteColor];
+        _circularCounter.backgroundColor = NSColorFromRGB(0x5098d3);
+        
+        [_circularCounter setHidden:YES];
+        
+        [self addSubview:_circularCounter];
+        
         [self addTarget:self action:@selector(clickHandler) forControlEvents:BTRControlEventLeftClick];
         
-      //  [self setCursor:[NSCursor pointingHandCursor] forControlState:BTRControlStateNormal];
         
-        [self setMessagesCount:32];
+        [self dropCounter];
+        
+
     }
     return self;
 }
 
+-(void)dropCounter {
+    _circularCounter.animated = NO;
+    _circularCounter.stringValue = @"1";
+    _circularCounter.animated = YES;
+}
+
+
+-(void)setMessagesViewController:(MessagesViewController *)messagesViewController {
+    _messagesViewController = messagesViewController;
+}
+
+
+
+-(void)setHidden:(BOOL)flag {
+
+    
+    self.alphaValue = !flag ? 0.0 : 1.0;
+    
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+        
+        [self.animator setAlphaValue:flag ? 0.0 : 1.0];
+        
+    } completionHandler:^{
+         [super setHidden:flag];
+        
+        if(flag) {
+            [self setMessagesCount:0];
+            [self dropCounter];
+            [self sizeToFit];
+        }
+        
+    }];
+    
+    
+    
+}
+
+
 - (void)clickHandler {
+
     if(_callback) {
+        
         [self setHidden:YES];
-        _callback();
+
+         _callback();
+        
     }
 }
+
+
 
 - (void)handleStateChange {
     [self setNeedsDisplay:YES];
@@ -46,14 +107,17 @@
         return;
     
     self->_messagesCount = messagesCount;
-    if(messagesCount) {
-        self.messagesCountAttributedString = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:NSLocalizedString(messagesCount == 1 ? @"Messages.scrollToBottomNewMessage" : @"Messages.scrollToBottomNewMessages", nil), messagesCount] attributes:@{NSFontAttributeName: [NSFont fontWithName:@"HelveticaNeue" size:14], NSForegroundColorAttributeName: BLUE_UI_COLOR}];
-    } else {
-        self.messagesCountAttributedString = nil;
-    }
+    
+    [_circularCounter setHidden:messagesCount == 0];
+    
+    if(messagesCount > 0)
+        _circularCounter.stringValue = [NSString stringWithFormat:@"%d",messagesCount];
+    
     
     [self setNeedsDisplay:YES];
 }
+
+
 
 - (void)drawRect:(NSRect)dirtyRect {
     [super drawRect:dirtyRect];
@@ -61,92 +125,68 @@
     CGContextRef context = [NSGraphicsContext currentContext].graphicsPort;
     [NSGraphicsContext saveGraphicsState];
     CGContextSetShouldSmoothFonts(context, TRUE);
-
-    
-//    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(1, 1, self.bounds.size.width - 2, self.bounds.size.height - 2) xRadius:3 yRadius:3];
-//    
-//    [NSColorFromRGB(0xfefefe) setFill];
-//    [path fill];
-//    
-//    [path setLineWidth:1];
-//    [NSColorFromRGB(0xe5e5e5) setStroke];
-//    [path stroke];
     
     
-    //ROMANOV BUGFIX
-    NSRect rect = NSMakeRect(1, 1, self.bounds.size.width - 2, self.bounds.size.height - 2);
-    int radius = 3;
+    int width = 42;
     
-    CGMutablePathRef pathRef = CGPathCreateMutable();
-
-    CGPathMoveToPoint(pathRef, NULL, rect.origin.x, rect.origin.y + radius);
-    CGPathAddLineToPoint(pathRef, NULL, rect.origin.x, rect.origin.y + rect.size.height - radius);
-    CGPathAddArc(pathRef, NULL, rect.origin.x + radius, rect.origin.y + rect.size.height - radius, radius, M_PI, M_PI / 2, 1); //STS fixed
-    CGPathAddLineToPoint(pathRef, NULL, rect.origin.x + rect.size.width - radius, rect.origin.y + rect.size.height);
-    CGPathAddArc(pathRef, NULL, rect.origin.x + rect.size.width - radius, rect.origin.y + rect.size.height - radius, radius, M_PI / 2, 0.0f, 1);
-    CGPathAddLineToPoint(pathRef, NULL, rect.origin.x + rect.size.width, rect.origin.y + radius);
-    CGPathAddArc(pathRef, NULL, rect.origin.x + rect.size.width - radius, rect.origin.y + radius, radius, 0.0f, -M_PI / 2, 1);
-    CGPathAddLineToPoint(pathRef, NULL, rect.origin.x + radius, rect.origin.y);
-    CGPathAddArc(pathRef, NULL, rect.origin.x + radius, rect.origin.y + radius, radius, -M_PI / 2, M_PI, 1);
-    
-    CGPathCloseSubpath(pathRef);
-    CGContextAddPath(context, pathRef);
+    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(1, 1, width, width) xRadius:width/2.0 yRadius:width/2.0];
     
     NSColor *fillColor = self.isHover ? NSColorFromRGB(0xffffff) : NSColorFromRGB(0xfdfdfd);
     NSColor *strokeColor = GRAY_BORDER_COLOR;
     
-    CGContextSetRGBFillColor(context, fillColor.redComponent, fillColor.greenComponent, fillColor.blueComponent, self.isHover ?  1.f : 0.96f);
-    CGContextAddPath(context, pathRef);
-    CGContextFillPath(context);
+    [fillColor setFill];
+    [strokeColor setStroke];
     
-    CGContextSetRGBStrokeColor(context, strokeColor.redComponent, strokeColor.greenComponent, strokeColor.blueComponent, 1);
-    CGContextAddPath(context, pathRef);
-    CGContextSetLineWidth(context, 1);
-    CGContextStrokePath(context);
+    [path setLineWidth:1];
     
-    CGPathRelease(pathRef);
+    [path fill];
+    [path stroke];
+    
 
     
-    NSPoint point;
-    point.x = self.bounds.size.width - 44 +  roundf((44 - image_ScrollDownArrow().size.width) * 0.5);
-    point.y = roundf((44 - image_ScrollDownArrow().size.height) * 0.5);
-
-    [image_ScrollDownArrow() drawAtPoint:point fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1];
+    NSPoint ipoint;
     
-    if(self.messagesCount) {
-        NSSize size = [self.messagesCountAttributedString size];
-        size.width = ceil(size.width);
-        NSPoint point = NSMakePoint(roundf((self.bounds.size.width - 28 - size.width) / 2.f), roundf( (self.bounds.size.height - size.height) / 2.f ) + 2);
-        [self.messagesCountAttributedString drawAtPoint:point];
-    }
+    ipoint.y = roundf((width - image_ScrollDownArrow().size.height) * 0.5);
+    
+    [image_ScrollDownArrow() drawAtPoint:ipoint fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1];
     
     [NSGraphicsContext restoreGraphicsState];
 }
 
-- (void)setHidden:(BOOL)flag {
-    [super setHidden:flag];
-        
-    if(flag) {
-        [self setMessagesCount:0];
-        [self sizeToFit];
-    }
+-(void)setFrameSize:(NSSize)newSize {
+    [super setFrameSize:newSize];
+    
+    [_circularCounter setCenteredXByView:self];
+    
+    [_circularCounter setFrameOrigin:NSMakePoint(NSMinX(_circularCounter.frame), newSize.height - NSHeight(_circularCounter.frame))];
 }
 
 - (void)sizeToFit {
     
     NSSize size = NSMakeSize(0, 0);
-    if(self.messagesCount) {
-        size = [self.messagesCountAttributedString size];
-        size.width = ceil(size.width);
-        size.width += 16;
+
+    
+    size.width =44;
+
+    size.height = 44;
+    
+    if(_messagesCount > 0) {
+        size.height+=20;
+        if(_messagesCount > 100)
+            size.height+=10;
     }
     
-    size.width += 44;
-    size.height = 44;
+//    if(_messagesCountAttributedString.length > 0) {
+//        NSSize tsize = [_messagesCountAttributedString size];
+//        int m = MAX(tsize.width + 10,tsize.height);
+//        size.height+= roundf(m/2.0f);
+//    }
     
     
     [self setFrameSize:size];
-  //  [self setNeedsDisplay:YES];
+    
+    
+    [self setNeedsDisplay:YES];
 //    [self.layer setNeedsLayout];
 //    [self.layer needsDisplay];
 }

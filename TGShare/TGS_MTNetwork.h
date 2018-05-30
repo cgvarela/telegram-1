@@ -1,11 +1,11 @@
 #import <Foundation/Foundation.h>
-#import <MtProtoKit/MTContext.h>
-#import <MtProtoKit/MTProto.h>
-#import <MTProtoKit/MTDatacenterAddressSet.h>
-#import <MTProtoKit/MTDatacenterAddress.h>
-#import <MtProtoKit/MTRequestMessageService.h>
-#import <MTProtoKit/MTKeychain.h>
-#import <MtProtoKit/MTQueue.h>
+#import <MtProtoKitMac/MTContext.h>
+#import <MtProtoKitMac/MTProto.h>
+#import <MtProtoKitMac/MTDatacenterAddressSet.h>
+#import <MtProtoKitMac/MTDatacenterAddress.h>
+#import <MtProtoKitMac/MTRequestMessageService.h>
+#import <MtProtoKitMac/MTKeychain.h>
+#import <MtProtoKitMac/MTQueue.h>
 #import "TLApiObject.h"
 #import "TGS_RPCRequest.h"
 
@@ -21,7 +21,7 @@
 -(void)sendRequest:(TGS_RPCRequest *)request forDatacenter:(int)datacenterId;
 -(void)sendRandomRequest:(TGS_RPCRequest *)request;
 -(MTDatacenterAuthInfo *)authInfoForDatacenter:(int)dc_id;
--(MTKeychain *)keyChain;
+-(id<MTKeychain>)keyChain;
 -(void)successAuthForDatacenter:(int)dc_id;
 -(BOOL)isAuth;
 -(int)getTime;

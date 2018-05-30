@@ -9,7 +9,10 @@
 #import "TGImageView.h"
 #import "TLFileLocation+Extensions.h"
 #import "TGCache.h"
-@interface TGImageView ()
+#import "SpacemanBlocks.h"
+@interface TGImageView () {
+    SMDelayedBlockHandle _handle;
+}
 @property (nonatomic, strong) NSTrackingArea *trackingArea;
 @property (nonatomic,strong) CALayer *borderLayer;
 @end
@@ -48,8 +51,10 @@
         self.image = image;
         return;
     }
+    
+    image = [self cachedThumb:[object cacheKey]];
         
-    self.image = [self cachedThumb:[object cacheKey]];
+    self.image = image;
   
     object.delegate = self;
     
@@ -60,10 +65,8 @@
 
 -(void)didDownloadImage:(NSImage *)newImage object:(ImageObject *)object {
     if([[object cacheKey] isEqualToString:[self.object cacheKey]]) {
-        if(object.class != NSClassFromString(@"TGPVImageObject"))
-            [self addAnimation:contentAnimation() forKey:@"contents"];
-        [self setImage:newImage];
-        
+        [self addAnimation:contentAnimation() forKey:@"contents"];
+        self.image = newImage;
     }
 }
 
@@ -121,10 +124,12 @@
     }
     
     
+    
+    
     NSPoint mouseLoc = [self convertPoint:[theEvent locationInWindow] fromView:nil];
     BOOL isInside = [self mouse:mouseLoc inRect:[self bounds]];
     
-    if(self.tapBlock && isInside) {
+    if(self.tapBlock && isInside && theEvent.clickCount == 1) {
         //  dispatch_async(dispatch_get_main_queue(), ^{
         self.tapBlock();
         //});
@@ -133,7 +138,7 @@
     }
 }
 
-static CAAnimation *contentAnimation() {
+CAAnimation *contentAnimation() {
     static CAAnimation *animation;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{

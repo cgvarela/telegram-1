@@ -5,34 +5,40 @@
 #ifdef __OBJC__
     #import <Cocoa/Cocoa.h>
 
-#define TGDEBUG // UNDEF IN RELEASE
-//#define TGStable // DEF IN stable version
-
-
 #ifdef TGDEBUG
+#ifndef TGSTABLE
 #import "TGUIMainThreadGuard.h"
 #endif
+#endif
+
+
 
 #define MR_ENABLE_ACTIVE_RECORD_LOGGING 0
-#import <MtProtoKit/MTLogging.h>
+#import <MtProtoKitMac/MTLogging.h>
 #import "ImageUtils.h"
-#import "POP.h"
-
+#import <POP/POP.h>
+#import "ASQueue.h"
+#import "TGDispatcher.h"
 #import "SelectTextManager.h"
 #import "CMath.h"
 #import "SharedManager.h"
-#import <MTProtoKit/MTLogging.h>
+#import <MtProtoKitMac/MTLogging.h>
 #import "TL_destructMessage.h"
-#import "TL_outDocument.h"
+#import "TL_destructMessage45.h"
+#import "TL_secretWebpage.h"
 #import "TL_localMessageService.h"
+#import "TLMessageFwdHeader+Extension.h"
 #import "TL_secretServiceMessage.h"
 #import "TL_messageActionSetMessageTTL.h"
 #import "TL_peerSecret.h"
 #import "TL_peerBroadcast.h"
 #import "TL_localMessage.h"
+#import "TL_localMessage_old46.h"
+#import "TL_localEmptyMessage.h"
 #import "TL_broadcast.h"
 #import "TL_messageActionEncryptedChat.h"
 #import "TL_messageActionBotDescription.h"
+#import "TL_localMessageService_old48.h"
 #import "TLUserStatusCategory.h"
 #import "TLClassStore.h"
 #import "UsersManager.h"
@@ -45,11 +51,10 @@
 #import "Storage.h"
 #import "Notification.h"
 #import "ChatsManager.h"
-#import "FullChatManager.h"
+#import "ChatFullManager.h"
 #import "TGDcAuth.h"
 #import "TLDocument+Extension.h"
 #import "TLEncryptedChat+Extensions.h"
-#import "LoopingUtils.h"
 
 #import "MessageSender.h"
 #import "TMElements.h"
@@ -70,10 +75,27 @@
 
 
 #ifdef TGDEBUG
-#define ACCEPT_FEATURE ([@[@"vihor",@"Marvin",@"Ricdallaglio",@"Victor",@"Jdkdkdkdmdmdmx",@"dmitry",@"peter",@"Zlomch",@"MarcoK",@"VitocoEP",@"zinoviev",@"ecstasy",@"Gerardo",@"kondratyevdev",@"Markus"] indexOfObject:[UsersManager currentUser].username] != NSNotFound)
+#ifndef TGSTABLE
+#define ACCEPT_FEATURE ([@[@"vihor",@"Marvin",@"Ricdallaglio",@"Victor",@"Jdkdkdkdmdmdmx",@"dmitry",@"peter",@"Zlomch",@"MarcoK",@"VitocoEP",@"zinoviev",@"ecstasy",@"Gerardo",@"kondratyevdev",@"Markus",@"Telegrafm",@"doublespb",@"izhukov",@"requilence",@"nadymov",@"kolar",@"asmico",@"Cooper1",@"MarkusRa",@"keepcoder"] indexOfObject:[UsersManager currentUser].username] != NSNotFound)
+#else 
+#define ACCEPT_FEATURE YES
+#endif
 #else
 #define ACCEPT_FEATURE YES
 #endif
 
+#ifdef TGDEBUG
+#define	TGAssert(e) assert(e)
+#else
+#define TGAssert(e)
+#endif
 
+#endif
+
+#ifdef TGDEBUG
+#ifdef TGSTABLE
+#   define NSLog(...) NSLog(__VA_ARGS__)
+#endif
+#else
+#   define NSLog(...)
 #endif

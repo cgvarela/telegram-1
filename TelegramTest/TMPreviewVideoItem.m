@@ -9,7 +9,6 @@
 #import "TMPreviewVideoItem.h"
 #import "FileUtils.h"
 #import "TLFileLocation+Extensions.h"
-#import "ImageCache.h"
 
 @implementation TMPreviewVideoItem
 
@@ -22,7 +21,7 @@
         
         _previewObject = previewObject;
         
-        _url = [NSURL fileURLWithPath:mediaFilePath(((TL_messageMediaVideo *)[(TL_localMessage *)_previewObject.media media]))];
+        _url = [NSURL fileURLWithPath:mediaFilePath(_previewObject.media)];
         
     }
     return self;

@@ -11,6 +11,7 @@
 #import "NSStringCategory.h"
 #import "NSString+Extended.h"
 #import "NSAttributedString+Hyperlink.h"
+#import "MessageTableCellVideoView.h"
 @implementation MessageTableItemVideo
 
 - (id) initWithObject:(TLMessage *)object {
@@ -22,70 +23,67 @@
         
         [self rebuildImageObject];
                 
-        if(self.message.media.caption.length > 0) {
-            NSMutableAttributedString *c = [[NSMutableAttributedString alloc] init];
-            
-            [c appendString:[[self.message.media.caption trim] fixEmoji] withColor:TEXT_COLOR];
-            
-            [c setFont:TGSystemFont(13) forRange:c.range];
-            
-            [c detectAndAddLinks:URLFindTypeHashtags | URLFindTypeLinks | URLFindTypeMentions];
-            
-            _caption = c;
-        }
-        
-        
-        [self checkStartDownload:[self.message.to_id isKindOfClass:[TL_peerChat class]] ? AutoGroupVideo : AutoPrivateVideo size:self.message.media.video.size];
+        [self checkStartDownload:[self.message.to_id isKindOfClass:[TL_peerChat class]] ? AutoGroupVideo : AutoPrivateVideo size:self.document.size];
     }
     return self;
 }
 
 
+-(TLDocument *)document {
+    if([self.message.media isKindOfClass:[TL_messageMediaBotResult class]]) {
+        return self.message.media.bot_result.document;
+    } else
+        return self.message.media.document;
+}
+
 -(void)rebuildImageObject {
     
-    TLVideo *video = self.message.media.video;
-    TLPhotoSize *photoSize = video.thumb;
+    TLDocument *document = self.document;
+    TLPhotoSize *photoSize = document.thumb;
     NSImage *placeholder;
+    
+    
     if([photoSize isKindOfClass:[TL_photoCachedSize class]]) {
         placeholder = [[NSImage alloc] initWithData:photoSize.bytes];
     }
     
-    self.videoPhotoLocation = photoSize.location;
+    NSImage *image = [TGCache cachedImage:document.thumb.location.cacheKey];
+    
+    if(!image) {
+        image = fileSize(document.thumb.location.path) > photoSize.size ? imageFromFile(document.thumb.location.path) : nil;
+        
+    }
     
     
     NSSize blockSize = NSMakeSize(photoSize.w , photoSize.h );
     
-    self.imageObject = [[TGImageObject alloc] initWithLocation:[photoSize isKindOfClass:[TL_photoCachedSize class]] ? nil : photoSize.location placeHolder:placeholder sourceId:self.message.n_id];
+    self.imageObject = [[TGImageObject alloc] initWithLocation:image == nil && !placeholder ? photoSize.location : nil placeHolder:image == nil ? placeholder : image];
     
     self.imageObject.imageSize = blockSize;
-    
-    
-    self.previewSize = blockSize;
-    
-    [self makeSizeByWidth:310];
+    self.imageObject.thumbProcessor = image == nil ? [ImageUtils b_processor] : nil;
+    self.imageObject.imageProcessor = [ImageUtils b_processor];
 }
 
 -(BOOL)makeSizeByWidth:(int)width {
-    [super makeSizeByWidth:width];
+    
+    TL_documentAttributeVideo *video = (TL_documentAttributeVideo *) [self.document attributeWithClass:[TL_documentAttributeVideo class]];
+    
+    self.contentSize = strongsize(NSMakeSize(MAX(150,video.w), MAX(150,video.h)), MIN(320,width));
+    
+
     
     
-    if(self.isForwadedMessage)
-        width-=50;
+     self.blockSize = NSMakeSize(self.contentSize.width, self.contentSize.height);
     
-    _videoSize = NSMakeSize(MIN(width - 60,250), self.message.media.video.thumb.h + (MIN(width - 60,250) - self.message.media.video.thumb.w));
-    
-    if(_caption) {
-        _captionSize = [_caption coreTextSizeForTextFieldForWidth:_videoSize.width - 4];
-        _captionSize.width = _videoSize.width - 4;
-    }
-    
-    int captionHeight = _captionSize.height ? _captionSize.height + 5 : 0;
-    
-     self.blockSize = NSMakeSize(_videoSize.width, _videoSize.height + captionHeight);
-    
-    return YES;
+    return [super makeSizeByWidth:width];
 }
 
+-(DownloadItem *)downloadItem {
+    if(super.downloadItem == nil)
+        [super setDownloadItem:[DownloadQueue find:self.document.n_id]];
+    
+    return [super downloadItem];
+}
 
 - (Class)downloadClass {
     return [DownloadVideoItem class];
@@ -93,17 +91,23 @@
 
 -(void)rebuildTimeString {
     
-    NSString *sizeInfo = self.message.media.video.size == 0 ? NSLocalizedString(@"Message.Send.Compressing", nil) : [NSString sizeToTransformedValue:self.message.media.video.size];
+    NSString *sizeInfo =  self.document.size == 0 ? self.document ? NSLocalizedString(@"Message.Send.Compressing", nil) : nil : [NSString sizeToTransformedValue:self.document.size];
+    
+    TL_documentAttributeVideo *video = (TL_documentAttributeVideo *) [self.document attributeWithClass:[TL_documentAttributeVideo class]];
     
     
-    NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:[[NSString durationTransformedValue:self.message.media.video.duration] stringByAppendingString:@", "] attributes:@{NSForegroundColorAttributeName: [NSColor whiteColor] }];
+    if(sizeInfo) {
+        NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] initWithString:[[NSString durationTransformedValue:video.duration] stringByAppendingString:@", "] attributes:@{NSForegroundColorAttributeName: [NSColor whiteColor] }];
+        
+        
+        [attr appendString:sizeInfo withColor:NSColorFromRGB(0xffffff)];
+        
+        [attr setFont:TGSystemFont(13) forRange:attr.range];
+        
+        self.videoTimeAttributedString = attr;
+    }
     
     
-    [attr appendString:sizeInfo withColor:NSColorFromRGB(0xffffff)];
-    
-    [attr setFont:TGSystemFont(13) forRange:attr.range];
-    
-    self.videoTimeAttributedString = attr;
     
     
     NSSize size = [self.videoTimeAttributedString size];
@@ -113,12 +117,12 @@
 }
 
 - (NSString *)filePath {
-    return mediaFilePath(self.message.media);
+    return mediaFilePath(self.message);
 }
 
 -(BOOL)isset {
     NSString *path = [self filePath];
-    return isPathExists(path) && [FileUtils checkNormalizedSize:path checksize:self.message.media.video.size];
+    return isPathExists(path) && [FileUtils checkNormalizedSize:path checksize:self.document.size];
 }
 
 -(BOOL)needUploader {
@@ -128,10 +132,15 @@
 
 -(void)doAfterDownload {
     [self rebuildImageObject];
+    
+}
+
+-(Class)viewClass {
+    return [MessageTableCellVideoView class];
 }
 
 -(BOOL)canDownload {
-    return self.message.media.video.dc_id != 0;
+    return self.document.dc_id != 0;
 }
 
 @end

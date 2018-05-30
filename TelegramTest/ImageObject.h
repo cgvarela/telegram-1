@@ -25,7 +25,8 @@
 @interface ImageObject : NSObject
 @property (nonatomic,strong) TLFileLocation *location;
 @property (nonatomic,assign,readonly) int size;
-@property (nonatomic,strong,readonly) NSImage *placeholder;
+@property (nonatomic,strong) NSImage *placeholder;
+@property (nonatomic,strong,readonly) NSData *thumbData;
 @property (nonatomic,assign,readonly) int sourceId;
 
 @property (nonatomic,assign) NSSize imageSize;
@@ -37,7 +38,7 @@
 
 @property (nonatomic,weak) id <TGImageObjectDelegate> delegate;
 
-
+@property (nonatomic,strong) id reserved1;
 
 @property (nonatomic,assign) BOOL isLoaded;
 
@@ -45,7 +46,7 @@
 -(id)initWithLocation:(TLFileLocation *)location placeHolder:(NSImage *)placeHolder;
 -(id)initWithLocation:(TLFileLocation *)location placeHolder:(NSImage *)placeHolder sourceId:(int)sourceId;
 -(id)initWithLocation:(TLFileLocation *)location placeHolder:(NSImage *)placeHolder sourceId:(int)sourceId size:(int)size;
-
+-(id)initWithLocation:(TLFileLocation *)location thumbData:(NSData *)thumbData size:(int)size;
 
 -(void)initDownloadItem;
 

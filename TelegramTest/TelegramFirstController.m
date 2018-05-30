@@ -9,12 +9,10 @@
 #import "TelegramFirstController.h"
 #define PERFORM_SELECTOR()  if([self.viewController respondsToSelector:sender.action]) [self controller:self.viewController performSelector:sender.action withObject:sender];
 #import "TMMediaController.h"
-#import "AboutViewControllerWindowController.h"
 #import "Rebel/Rebel.h"
 #import "TGPhotoViewer.h"
 #import "TGAudioPlayerWindow.h"
 @interface TelegramFirstController ()
-@property (nonatomic,strong) AboutViewControllerWindowController *aboutViewController;
 
 
 
@@ -35,21 +33,28 @@
     
 #ifndef TGDEBUG
     
+    
     NSMenu *menu = [NSApp mainMenu];
     NSMenuItem *main = [menu itemAtIndex:0];
     
     [main.submenu removeItem:[main.submenu itemWithTag:1000]];
     
-  
-    main = [menu itemAtIndex:1];
-    [main.submenu removeItemAtIndex:1];
     
 #endif
     
     
-    
+}
 
-    
+- (IBAction)findAction:(id)sender {
+    [appWindow().navigationController.messagesViewController showSearchBox];
+}
+
+- (IBAction)findNextAction:(id)sender {
+    [appWindow().navigationController.messagesViewController nextSearchResult];
+}
+
+- (IBAction)findPreviousAction:(id)sender {
+    [appWindow().navigationController.messagesViewController prevSearchResult];
 }
 
 - (void)controller:(TMViewController *)controller performSelector:(SEL)aSelector withObject:(id)anArgument {
@@ -78,7 +83,11 @@
 
 
 - (IBAction)openSettings:(id)sender {
-    [[Telegram rightViewController] showGeneralSettings];
+    if (![Telegram isSingleLayout]) {
+        [[Telegram leftViewController] showTabControllerAtIndex:2];
+    } else {
+        [[Telegram rightViewController] showGeneralSettings];
+    }
     
 }
 
@@ -100,7 +109,7 @@
             [dialog save];
         }
         
-        [[Telegram rightViewController] showByDialog:dialog sender:self];
+        [appWindow().navigationController showMessagesViewController:dialog];
     };
     
     
@@ -132,8 +141,13 @@
     [[Telegram leftViewController] showUserSettings];
 }
 - (IBAction)showMedia:(id)sender {
-    [[Telegram rightViewController] showCollectionPage:[Telegram rightViewController].messagesViewController.conversation];
-  //  [[TGPhotoViewer viewer] show:nil conversation:[Telegram rightViewController].messagesViewController.conversation];
+    
+    TMCollectionPageController *collectionViewController = [[TMCollectionPageController alloc] initWithFrame:NSZeroRect];
+    
+    [collectionViewController setConversation:[Telegram conversation]];
+    
+    [appWindow().navigationController pushViewController:collectionViewController animated:YES];
+    
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
@@ -168,7 +182,15 @@
             return YES;
         } else if(menuItem.action == @selector(showAudioMiniPlayer:)) {
             return [Telegram conversation] && [Telegram conversation].type != DialogTypeSecretChat && [Telegram conversation].type != DialogTypeBroadcast;
+        } else if(menuItem.action == @selector(findAction:)) {
+            return [appWindow().navigationController.currentController isKindOfClass:[MessagesViewController class]];
+        }else if(menuItem.action == @selector(findPreviousAction:)) {
+            return [appWindow().navigationController.currentController isKindOfClass:[MessagesViewController class]] && [appWindow().navigationController.messagesViewController searchBoxIsVisible];
         }
+        else if(menuItem.action == @selector(findNextAction:)) {
+            return [appWindow().navigationController.currentController isKindOfClass:[MessagesViewController class]] && [appWindow().navigationController.messagesViewController searchBoxIsVisible];
+        }
+
     }
     
     if(menuItem.action == @selector(aboutAction:))
@@ -180,9 +202,7 @@
 
 
 - (IBAction)showAudioMiniPlayer:(id)sender {
-#ifdef TGDEBUG
-    [TGAudioPlayerWindow show:[Telegram conversation]];
-#endif
+    [TGAudioPlayerWindow show:[Telegram conversation]  navigation:appWindow().navigationController];
 }
 
 

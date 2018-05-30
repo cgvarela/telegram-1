@@ -10,6 +10,8 @@
 #import "TGCTextView.h"
 #import "TGPhotoViewer.h"
 #import "TGEmbedModalView.h"
+#import "TGWebpageGifContainer.h"
+#import "TGWebpageDocumentContainer.h"
 @interface TGWebpageContainer ()
 @property (nonatomic,strong,readonly) TMView *containerView;
 @end
@@ -20,16 +22,24 @@
     [super drawRect:dirtyRect];
     
     
-    [LINK_COLOR setFill];
+    [BLUE_SEPARATOR_COLOR setFill];
     
     NSRectFill(NSMakeRect(0, 0, 2, NSHeight(self.frame)));
 }
 
 -(void)mouseDown:(NSEvent *)theEvent {
-    
+    if(![self mouseInContainer:theEvent] || [self isKindOfClass:[TGWebpageDocumentContainer class]]) {
+        [super mouseDown:theEvent];
+    }
 }
 
+-(BOOL)mouseInContainer:(NSEvent *)theEvent {
+    return [self mouse:[self convertPoint:theEvent.locationInWindow fromView:nil] inRect:_containerView.frame];
+}
 
+-(void)_didChangeBackgroundColorWithAnimation:(POPBasicAnimation *)anim toColor:(NSColor *)color {
+    
+}
 
 -(instancetype)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
@@ -38,7 +48,7 @@
         [_containerView setIsFlipped:YES];
         
         _containerView.wantsLayer = YES;
-                
+        
         [super addSubview:_containerView];
         
         
@@ -64,16 +74,17 @@
         _imageView = [[TGImageView alloc] initWithFrame:NSZeroRect];
         
         _imageView.cornerRadius = 4;
+        [_imageView setContentMode:BTRViewContentModeScaleAspectFill];
         
         [_imageView setTapBlock:block];
         
         [self addSubview:_imageView];
         
         _siteName = [TMTextField defaultTextField];
-        
-        
-        [self.siteName setFrameOrigin:NSMakePoint(5, -6)];
-        [self.author setFrameOrigin:NSMakePoint(5, 10)];
+        [[_siteName cell] setTruncatesLastVisibleLine:YES];
+        [[_author cell] setTruncatesLastVisibleLine:YES];
+        [self.siteName setFrameOrigin:NSMakePoint(8, -4)];
+        [self.author setFrameOrigin:NSMakePoint(8, 12)];
         
         [super addSubview:_siteName];
     }
@@ -82,13 +93,6 @@
 }
 
 
--(void)setFrame:(NSRect)frame {
-    
-    
-    [super setFrame:frame];
-    
-    [_containerView setFrame:NSMakeRect(7, self.webpage.author ? 30 : 14,NSWidth(frame) - 7,self.webpage.size.height )];
-}
 
 -(void)addSubview:(NSView *)aView {
     [_containerView addSubview:aView];
@@ -98,40 +102,44 @@
     _webpage = webpage;
     
     
-    [_containerView setFrame:NSMakeRect(7, self.webpage.author ? 30 : 14,NSWidth(self.frame) - 7,self.webpage.size.height )];
+    [_containerView setFrame:NSMakeRect([MessageTableItem defaultOffset], self.webpage.blockHeight - self.webpage.size.height , webpage.size.width,self.webpage.size.height )];
     
     [self.author setHidden:!webpage.author];
     
     if(webpage.author ) {
         [self.author setAttributedStringValue:webpage.author];
-        [self.author setFrameSize:NSMakeSize([self maxTextWidth], 20)];
+        [self.author setFrameSize:NSMakeSize(NSWidth(self.frame) - NSMinX(self.author.frame), 20)];
     }
 
-    [self.siteName setFrameSize:NSMakeSize([self maxTextWidth], 20)];
+    [self.siteName setFrameSize:NSMakeSize(NSWidth(self.frame) - NSMinX(self.author.frame), 20)];
     [self.siteName setAttributedStringValue:webpage.siteName];
 
     
-    [_imageView setObject:webpage.imageObject];
-    
-    [webpage.imageObject.supportDownloadListener setProgressHandler:^(DownloadItem *item) {
+    if(!_imageView.isHidden) {
+        [_imageView setObject:webpage.imageObject];
         
-        [ASQueue dispatchOnMainQueue:^{
+        [webpage.imageObject.supportDownloadListener setProgressHandler:^(DownloadItem *item) {
             
-             [self.loaderView setProgress:item.progress animated:YES];
-            
-        }];
-        
-    }];
-    
-    [webpage.imageObject.supportDownloadListener setCompleteHandler:^(DownloadItem *item) {
-        
-        [ASQueue dispatchOnMainQueue:^{
-            
-            [self updateState:0];
+            [ASQueue dispatchOnMainQueue:^{
+                
+                [self.loaderView setProgress:item.progress animated:YES];
+                
+            }];
             
         }];
         
-    }];
+        [webpage.imageObject.supportDownloadListener setCompleteHandler:^(DownloadItem *item) {
+            
+            [ASQueue dispatchOnMainQueue:^{
+                
+                [self updateState:0];
+                
+            }];
+            
+        }];
+
+    }
+    
     
 }
 
@@ -140,8 +148,6 @@
 }
 
 -(void)updateState:(TMLoaderViewState)state {
-    
-    
     
     if(!self.item.isset) {
         [_loaderView removeFromSuperview];
@@ -161,9 +167,7 @@
         if(self.loaderView.currentProgress > 0) {
             [self.loaderView setProgress:self.loaderView.currentProgress animated:YES];
         }
-        
-        
-        
+ 
 
     } else  {
         [_loaderView removeFromSuperview];
@@ -179,9 +183,6 @@
     
     int width = self.containerSize.width;
     
-    if([self.webpage.webpage.type isEqualToString:@"profile"]) {
-        width = width - 75;
-    }
     
     return width;
 }
@@ -198,19 +199,22 @@
 
 -(void)showPhoto {
     
-    if(![self.webpage.webpage.type isEqualToString:@"profile"] && self.webpage.imageObject) {
+    if(![self.webpage.webpage.type isEqualToString:@"profile"]) {
         
         PreviewObject *previewObject =[[PreviewObject alloc] initWithMsdId:self.webpage.webpage.photo.n_id media:[self.webpage.webpage.photo.sizes lastObject] peer_id:0];
         
+        previewObject.reservedObject1 = self.item.message;
         previewObject.reservedObject = self.imageView.image;
         
         if([self.webpage.webpage.type isEqualToString:@"video"] && [self.webpage.webpage.embed_type isEqualToString:@"video/mp4"]) {
             
             previewObject.reservedObject = @{@"url":[NSURL URLWithString:self.webpage.webpage.embed_url],@"size":[NSValue valueWithSize:NSMakeSize(self.webpage.webpage.embed_width, self.webpage.webpage.embed_height)]};
             
-        } else if([self.webpage.webpage.embed_type isEqualToString:@"iframe"]) {
             
-            TGEmbedModalView *embed =  [[TGEmbedModalView alloc] init];
+        } else if([self.webpage.webpage.embed_type isEqualToString:@"iframe"]) {
+
+            
+            TGEmbedModalView *embed = [[TGEmbedModalView alloc] init];
             
             [embed setWebpage:self.webpage.webpage];
             
@@ -221,7 +225,11 @@
             return;
         }
         
-        [[TGPhotoViewer viewer] show:previewObject];
+        if(![self.webpage.webpage.type isEqualToString:@"gif"]) {
+            [[TGPhotoViewer viewer] show:previewObject];
+        }
+        
+        
         
     } else {
         if([self.webpage.webpage.type isEqualToString:@"profile"]) {

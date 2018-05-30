@@ -7,13 +7,11 @@
 //
 
 #import "TGDownloadOperation.h"
-#import "ImageCache.h"
-#import "ImageStorage.h"
-#import "ImageStorage.h"
 #import "Crypto.h"
 #import "FileUtils.h"
 #import "NSMutableData+Extension.h"
 #import "DownloadPart.h"
+#import "DownloadQueue.h"
 @interface TGDownloadOperation ()
 @property (nonatomic,strong)id target;
 @property (nonatomic,assign) SEL selector;
@@ -100,7 +98,7 @@
             [DownloadQueue setProgress:70 toOperation:self];
         }
         
-        if(![self.item isEncrypted] && self.item.size != 0 && self.downloaded == self.item.size && self.item.fileType != DownloadFileImage) {
+        if(![self.item isEncrypted] && self.item.size != 0 && self.downloaded >= self.item.size && self.item.fileType != DownloadFileImage) {
             _item.downloadState = DownloadStateCompleted;
             [self.target performSelectorInBackground:self.selector withObject:self];
             return;
@@ -109,10 +107,9 @@
         
         if(_item.fileType == DownloadFileImage) {
             
-            
             NSData *imageData = [NSData dataWithContentsOfFile:self.item.path];
 
-            if(imageData == nil || (imageData.length == 0 || (self.item.size > 0 && self.item.size > imageData.length))) {
+            if(imageData == nil || (imageData.length == 0 || (self.item.checkSize && self.item.size > 0 && self.item.size > imageData.length))) {
                 [self load];
             } else {
                 _item.isRemoteLoaded = NO;
@@ -175,6 +172,7 @@
     
     TLAPI_upload_getFile *upload = [TLAPI_upload_getFile createWithLocation:part.item.input offset:part.offset limit:self.partSize];
     
+
     part.request = [RPCRequest sendRequest:upload forDc:part.dcId successHandler:^(RPCRequest *request, id response) {
         
             TLupload_File *obj = response;
@@ -233,8 +231,6 @@
             [self load];
             
         }  else{
-            part.request = nil;
-            
             [self cancel];
         }
         
@@ -243,19 +239,18 @@
 
 -(void)proccessPartData:(NSData *)partData {
     
-   
-    
     if(self.key && self.iv)
         partData = [Crypto aesEncryptModify:[[partData mutableCopy] addPadding:16] key:self.key iv:self.iv encrypt:NO];
     
     self.downloaded+=partData.length;
     
     const uint8_t *bytes = (const uint8_t*)[partData bytes];
-    [self.stream write:bytes maxLength:partData.length];
     
+    if(self.item.instantlySave) {
+        [self.stream write:bytes maxLength:partData.length];
+    }
     
-    
-    if(_item.fileType == DownloadFileImage)
+     if(_item.fileType == DownloadFileImage)
         [self.resultData appendData:partData];
     
     
@@ -263,6 +258,11 @@
         [self.stream close];
         _item.progress = 100.0f;
         _item.result = self.resultData;
+        
+        if(!self.item.instantlySave) {
+            [self.resultData writeToFile:self.item.path atomically:YES];
+        }
+        
         if(_item.downloadState == DownloadStateCanceled) {
             [self cancel];
         } else {
@@ -312,6 +312,8 @@
     
 }
 
-
+-(void)dealloc {
+    
+}
 
 @end

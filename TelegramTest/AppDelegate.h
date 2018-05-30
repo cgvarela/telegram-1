@@ -7,23 +7,23 @@
 //
 
 #import <Cocoa/Cocoa.h>
-#import "TGInitializer.h"
-#import "NSContactsPopover.h"
 
 #ifdef TGDEBUG
-
+#ifndef TGSTABLE
 #import <HockeySDK/HockeySDK.h>
+#endif
+#endif
 
+#ifdef TGDEBUG
+#import <Sparkle/Sparkle.h>
 #endif
 
 #import "TelegramWindow.h"
 #import "LoginWindow.h"
 #import "MainWindow.h"
-
+#import "SPMediaKeyTap.h"
 @class Telegram;
 
-@protocol NSUserNotificationCenterDelegate <NSObject>
-@end
 
 
 @interface AppDelegate : NSObject <NSApplicationDelegate, NSApplicationDelegate,NSWindowDelegate, NSUserNotificationCenterDelegate>
@@ -33,6 +33,8 @@
 @property (nonatomic, strong) IBOutlet  Telegram *telegram;
 @property (nonatomic, strong) MainWindow *mainWindow;
 @property (nonatomic, strong) LoginWindow *loginWindow;
+
+@property (nonatomic, strong) SPMediaKeyTap *mediaKeyTap;
 
 @property (nonatomic, strong,readonly) NSStatusItem *statusItem;
 

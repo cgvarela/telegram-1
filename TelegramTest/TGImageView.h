@@ -13,7 +13,6 @@
 @interface TGImageView : BTRImageView<NSImageDelegate,TGImageObjectDelegate>
 
 
-
 @property (nonatomic,strong) ImageObject *object;
 
 
@@ -33,6 +32,6 @@
 -(NSImage *)cachedThumb:(NSString *)key;
 
 
-static CAAnimation *contentAnimation();
+CAAnimation *contentAnimation();
 
 @end

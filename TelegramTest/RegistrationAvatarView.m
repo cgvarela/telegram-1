@@ -8,7 +8,7 @@
 
 #import "RegistrationAvatarView.h"
 #import <Quartz/Quartz.h>
-#import "TMImageUtils.h"
+#import "ImageUtils.h"
 
 @interface RegistrationAvatarView()
 @property (nonatomic, strong) TMTextField *placeholderTextField;
@@ -25,7 +25,7 @@
         self.placeholderTextField = [[TMTextField alloc] init];
         [self.placeholderTextField setEditable:NO];
         [self.placeholderTextField setBordered:NO];
-        [self.placeholderTextField setFont:[NSFont fontWithName:@"HelveticaNeue" size:15]];
+        [self.placeholderTextField setFont:TGSystemFont(15)];
         [self.placeholderTextField setTextColor:NSColorFromRGB(0xc8c8c8)];
         [self.placeholderTextField setStringValue:NSLocalizedString(@"Registration.AddPhoto", nil)];
         [self.placeholderTextField setAlignment:NSCenterTextAlignment];
@@ -77,7 +77,7 @@
         NSImage *outputImage = [pictureTaker outputImage];
         if(outputImage.size.width >= 100 && outputImage.size.height >= 100) {
             self.photo = outputImage;
-            NSImage *image = [TMImageUtils roundedImageNew:outputImage size:self.bounds.size];
+            NSImage *image = [ImageUtils roundedImageNew:outputImage size:self.bounds.size];
             [self.placeholderTextField setHidden:YES];
             [self addAnimation:ani3() forKey:@"contents"];
             self.image = image;

@@ -11,6 +11,8 @@
 @interface StickersPanelView : TMView
 
 
+@property (nonatomic,weak) MessagesViewController *messagesViewController;
+
 -(void)showAndSearch:(NSString *)emotion animated:(BOOL)animated;
 -(void)hide:(BOOL)animated;
 
@@ -18,6 +20,11 @@
 void setRemoteStickersLoaded(BOOL loaded);
 bool isRemoteStickersLoaded();
 
-+(void)addLocalSticker:(TLDocument *)document;
 +(BOOL)hasSticker:(TLDocument *)document;
+
+-(void)selectPrev;
+-(void)selectNext;
+
+-(TLDocument *)selectedSticker;
+
 @end

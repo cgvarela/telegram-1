@@ -143,6 +143,26 @@
     return self;
 }
 
+- (instancetype)initWithController:(NSViewController *)controller {
+    
+    
+    self = [super init];
+    
+    if (self == nil)
+        return nil;
+    
+    _autoHighlight = YES;
+    
+
+    _contentViewController = controller;
+    _backgroundViewClass = TMMenuPopoverBackgroundView.class;
+    _behavior = TMMenuPopoverBehaviorTransient;
+    _animates = YES;
+    _fadeDuration = 0.1;
+    
+    return self;
+}
+
 - (void)setHoverView:(BTRControl *)hoverView {
     _hoverView = hoverView;
     
@@ -284,6 +304,7 @@
     if (self.shown) {
         if (self.backgroundView.popoverEdge == popoverEdge) {
             [self.popoverWindow setFrame:popoverScreenRect display:YES];
+            [self.shadowWindow setFrame:popoverScreenRect display:YES];
             return;
         }
         
@@ -318,10 +339,10 @@
             
             
             if (shouldClose) {
-               // id mouseDownView = [((AppDelegate *)[NSApp delegate]).window.contentView hitTest:event.locationInWindow];
-              //  if(mouseDownView != self.positioningView) {
+                id mouseDownView = [appWindow().contentView hitTest:event.locationInWindow];
+                if(mouseDownView != self.positioningView) {
                     [strongSelf close];
-              //  }
+                }
             }
         };
         

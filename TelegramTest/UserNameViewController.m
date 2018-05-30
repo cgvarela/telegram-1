@@ -84,7 +84,7 @@
         
         [str appendString:NSLocalizedString(@"UserName.placeHolder", nil) withColor:DARK_GRAY];
         [str setAlignment:NSLeftTextAlignment range:str.range];
-        [str setFont:[NSFont fontWithName:@"HelveticaNeue" size:15] forRange:str.range];
+        [str setFont:TGSystemFont(15) forRange:str.range];
         
         [[self.textView textView].cell setPlaceholderAttributedString:str];
         [[self.textView textView] setPlaceholderPoint:NSMakePoint(0, 0)];
@@ -99,12 +99,12 @@
         [self.textView.textView setFrameOrigin:NSMakePoint(0, NSMinY(self.textView.textView.frame))];
         
         
-        self.descriptionView = [[NSTextView alloc] initWithFrame:NSMakeRect(96, 122, NSWidth(self.frame) - 200, 100)];
+        self.descriptionView = [[NSTextView alloc] initWithFrame:NSMakeRect(96, 122, NSWidth(self.frame) - 200, 150)];
         
         [self.descriptionView setString:NSLocalizedString(@"UserName.description", nil)];
         
-        [self.descriptionView setFont:[NSFont fontWithName:@"HelveticaNeue" size:12]];
-        
+        [self.descriptionView setFont:TGSystemFont(12)];
+        [self.descriptionView setTextColor:GRAY_TEXT_COLOR];
         [self.descriptionView sizeToFit];
         [self.descriptionView setSelectable:NO];
         
@@ -121,7 +121,7 @@
 
 
 - (void)performEnter {
-    if(self.isRemoteChecked && ![[UsersManager currentUser].username isEqualToString:self.checkedUserName]) {
+    if(self.isRemoteChecked && ![[self defaultUsername] isEqualToString:self.checkedUserName]) {
         [self.textView.textView resignFirstResponder];
         self.controller.doneButton.tapBlock();
     }
@@ -129,7 +129,7 @@
 
 -(void)updateSaveButton {
     
-    if([[UsersManager currentUser].username isEqualToString:self.textView.textView.stringValue]) {
+    if([[self defaultUsername] isEqualToString:self.textView.textView.stringValue]) {
         [self.controller.doneButton setDisable:YES];
         
         return;
@@ -173,10 +173,23 @@
     return r.location == 0;
 }
 
+-(NSString *)defaultUsername {
+    return self.controller.channel ? self.controller.channel.username : [UsersManager currentUser].username;
+}
+
+-(id)checkUsernameRequest:(NSString *)userNameToCheck {
+    id request = [TLAPI_account_checkUsername createWithUsername:userNameToCheck];
+    
+    if(self.controller.channel) {
+        request = [TLAPI_channels_checkUsername createWithChannel:[self.controller.channel inputPeer] username:userNameToCheck];
+    }
+    
+    return request;
+}
 
 -(void)updateChecker {
     
-    if([self.textView.textView.stringValue isEqualToString:[UsersManager currentUser].username]) {
+    if([self.textView.textView.stringValue isEqualToString:[self defaultUsername]]) {
         [self.progressView setHidden:YES];
         [self.progressView stopAnimation:self];
         [self.successView setHidden:NO];
@@ -188,7 +201,7 @@
         if(!self.timer) {
             
             self.isSuccessChecked = NO;
-            self.isRemoteChecked = [self.textView.textView.stringValue isEqualToString:[UsersManager currentUser].username];
+            self.isRemoteChecked = [self.textView.textView.stringValue isEqualToString:[self defaultUsername]];
             [self updateSaveButton];
             
             self.timer = [[TGTimer alloc] initWithTimeout:0.2 repeat:NO completion:^{
@@ -204,7 +217,9 @@
                 
                 NSString *userNameToCheck = self.textView.textView.stringValue;
                 
-                self.request = [RPCRequest sendRequest:[TLAPI_account_checkUsername createWithUsername:userNameToCheck] successHandler:^(RPCRequest *request, id response) {
+               
+                
+                self.request = [RPCRequest sendRequest:[self checkUsernameRequest:userNameToCheck] successHandler:^(RPCRequest *request, id response) {
                     
                     self.isSuccessChecked = [response isKindOfClass:[TL_boolTrue class]];
                     self.isRemoteChecked = YES;
@@ -271,11 +286,7 @@
 -(void)setFrameSize:(NSSize)newSize {
     [super setFrameSize:newSize];
     
-    NSSize size = [self.descriptionView.attributedString sizeForTextFieldForWidth:newSize.width - 200];
-    
-   
-    
-    [self.descriptionView setFrameSize:size];
+    [self.descriptionView setFrameSize:NSMakeSize(newSize.width - 200, 400)];
 }
 
 @end
@@ -292,22 +303,40 @@
     [self setCenterBarViewText:NSLocalizedString(@"Profile.ChangeUserName", nil)];
     
     
-    weakify();
+    weak();
     self.doneButton = [TMTextButton standartUserProfileNavigationButtonWithTitle:NSLocalizedString(@"Username.setName", nil)];
     [self.doneButton setTapBlock:^{
         
+        [weakSelf showModalProgress];
         
-        [strongSelf showModalProgress];
-        [[UsersManager sharedManager] updateUserName:((UserNameViewContainer *)strongSelf.view).checkedUserName completeHandler:^(TLUser *user) {
-            
-            [strongSelf hideModalProgress];
-            
-            
-            [((UserNameViewContainer *)strongSelf.view) controlTextDidChange:nil];
-        } errorHandler:^(NSString *error) {
-            alert(error, error);
-            [strongSelf hideModalProgress];
-        }];
+        if(weakSelf.channel != nil) {
+            [[ChatsManager sharedManager] updateChannelUserName:((UserNameViewContainer *)weakSelf.view).checkedUserName channel:weakSelf.channel completeHandler:^(TL_channel *channel) {
+                [weakSelf hideModalProgress];
+                
+                
+                [((UserNameViewContainer *)weakSelf.view) controlTextDidChange:nil];
+                
+                if(weakSelf.completionHandler != nil) {
+                    weakSelf.completionHandler();
+                }
+
+            } errorHandler:^(NSString *error) {
+                alert(error, error);
+                [weakSelf hideModalProgress];
+            }];
+        } else {
+            [[UsersManager sharedManager] updateUserName:((UserNameViewContainer *)weakSelf.view).checkedUserName completeHandler:^(TLUser *user) {
+                
+                [weakSelf hideModalProgress];
+                [((UserNameViewContainer *)weakSelf.view) controlTextDidChange:nil];
+                
+            } errorHandler:^(NSString *error) {
+                alert(error, error);
+                [weakSelf hideModalProgress];
+            }];
+
+        }
+        
     }];
     
     [self.doneButton setDisableColor:GRAY_TEXT_COLOR];
@@ -332,7 +361,7 @@
 -(void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
-    [((UserNameViewContainer *)self.view).textView.textView setStringValue:[UsersManager currentUser].username];
+    [((UserNameViewContainer *)self.view).textView.textView setStringValue:[(UserNameViewContainer *)self.view defaultUsername]];
     [((UserNameViewContainer *)self.view) controlTextDidChange:nil];
     
 }

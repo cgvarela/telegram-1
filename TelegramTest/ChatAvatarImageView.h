@@ -7,7 +7,6 @@
 //
 
 #import "TMAvatarImageView.h"
-#import "TL_broadcast.h"
 @class ChatInfoViewController;
 
 @interface ChatAvatarImageView : TMAvatarImageView
@@ -15,16 +14,16 @@
 typedef enum {
     ChatAvatarSourceUser,
     ChatAvatarSourceGroup,
-    ChatAvatarSourceBroadcast
+    ChatAvatarSourceBroadcast,
+    ChatAvatarSourceChannel
 } ChatAvatarSourceType;
 
 
 @property (nonatomic,assign) ChatAvatarSourceType sourceType;
 
-@property (nonatomic,strong) TLUser *user;
-@property (nonatomic,strong) TLChat *chat;
 
-@property (nonatomic, strong) ChatInfoViewController *controller;
+@property (nonatomic,assign,getter=isEditable) BOOL editable;
+
 - (void)rebuild;
 - (void)showUpdateChatPhotoBox;
 @end

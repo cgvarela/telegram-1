@@ -7,12 +7,12 @@
 //
 
 #import "TGForwardContainer.h"
-
+#import "TGTextLabel.h"
 
 @interface TGForwardContainer ()
 
-@property (nonatomic,strong) TMTextField *namesField;
-@property (nonatomic,strong) TMTextField *descriptionField;
+@property (nonatomic,strong) TGTextLabel *nameLabel;
+@property (nonatomic,strong) TGTextLabel *descLabel;
 @property (nonatomic,strong) NSImageView *deleteImageView;
 
 
@@ -32,23 +32,12 @@
 -(instancetype)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
         
-        self.descriptionField = [TMTextField defaultTextField];
-        self.namesField = [TMTextField defaultTextField];
+        _descLabel = [[TGTextLabel alloc] init];
+        _nameLabel = [[TGTextLabel alloc] init];
         
         
-        [self.descriptionField setStringValue:@"test"];
-        
-        
-        [self.namesField setStringValue:@"super test"];
-        
-        
-        [self.namesField setFrame:NSMakeRect(5, NSHeight(frameRect) - 13, NSWidth(frameRect), 20)];
-        
-        [self.descriptionField setFrame:NSMakeRect(5, 0, NSWidth(frameRect), 19)];
-        
-        [self addSubview:self.descriptionField];
-        [self addSubview:self.namesField];
-        
+        [self addSubview:_descLabel];
+        [self addSubview:_nameLabel];
         
         
         _deleteImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(NSWidth(self.frame) - image_CancelReply().size.width , NSHeight(self.frame) - image_CancelReply().size.height , image_CancelReply().size.width , image_CancelReply().size.height)];
@@ -75,18 +64,21 @@
 
 -(void)setFwdObject:(TGForwardObject *)fwdObject {
     _fwdObject = fwdObject;
-    
-    [self updateLayout];
+    [self setFrameSize:self.frame.size];
 }
 
 
--(void)updateLayout {
+-(void)setFrameSize:(NSSize)newSize {
+    [super setFrameSize:newSize];
     
-    [self.descriptionField setAttributedStringValue:_fwdObject.fwd_desc];
-    [self.namesField setAttributedStringValue:_fwdObject.names];
+    [_nameLabel setText:_fwdObject.names maxWidth:NSWidth(self.frame) - image_CancelReply().size.width - 15];
+    [_nameLabel setFrameOrigin:NSMakePoint(9, NSHeight(self.frame) - NSHeight(_nameLabel.frame))];
     
-    [self setNeedsDisplay:YES];
+    [_descLabel setText:_fwdObject.fwd_desc maxWidth:NSWidth(self.frame) - image_CancelReply().size.width - 15];
+    [_descLabel setFrameOrigin:NSMakePoint(9, 0)];
 }
+
+
 
 
 @end

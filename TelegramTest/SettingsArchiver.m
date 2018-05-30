@@ -23,6 +23,9 @@
 
 @implementation SettingsArchiver
 
+NSString *const kPermissionInlineBotGeo = @"kPermissionInlineBotGeo";
+NSString *const kPermissionInlineBotContact = @"kPermissionInlineBotContact";
+NSString *const kPermissionInlineBotLocationRequest = @"kPermissionInlineBotLocationRequest";
 
 static NSString *kArchivedSettings = @"kArchivedSettings";
 
@@ -52,7 +55,7 @@ static NSString *kArchivedSettings = @"kArchivedSettings";
 
 - (void)initialize {
     self.auto_download_limit_size = DownloadLimitSize10;
-    self.mask = SendEnter | OnlineFocused | SoundEffects | AutoGroupAudio | AutoPrivateAudio | AutoPrivatePhoto | AutoGroupPhoto | PushNotifications | iCloudSynch | StatusBarIcon;
+    self.mask = SendEnter | OnlineFocused | SoundEffects | AutoGroupAudio | AutoPrivateAudio | AutoPrivatePhoto | AutoGroupPhoto | PushNotifications | iCloudSynch | StatusBarIcon | MessagesNotificationPreview | MarkedInputText | IncludeMutedUnreadCount;
     self.documents_folder = dp();
     self.defaultSoundNotification = @"DefaultSoundName";
 
@@ -175,8 +178,78 @@ static NSString *kArchivedSettings = @"kArchivedSettings";
 }
 
 + (NSString *)documentsFolder {
-    return [SettingsArchiver instance].documents_folder;
+    
+    NSString *dp = NSSearchPathForDirectoriesInDomains(NSDownloadsDirectory, NSUserDomainMask, YES)[0];
+    
+    NSString *cdp = [SettingsArchiver instance].documents_folder;
+    
+    if(![dp isEqualToString:cdp]) {
+        if([[NSFileManager defaultManager] isWritableFileAtPath:cdp])
+            return cdp;
+    }
+    
+    return dp;
 }
+
++(NSFont *)font {
+    return [SettingsArchiver checkMaskedSetting:BigFontSetting] ? TGSystemFont(15) : TGSystemFont(13);
+}
+
++(NSFont *)font11 {
+    return TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 13 : 11);
+}
++(NSFont *)font12 {
+    return TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 14 : 12);
+}
++(NSFont *)font13 {
+    return TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 13);
+}
++(NSFont *)font14 {
+    return TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 16 : 14);
+}
++(NSFont *)font15 {
+    return TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 17 : 15);
+}
+
++(NSFont *)font125 {
+  return TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 13 : 12.5);
+}
++(NSFont *)fontMedium125 {
+    return TGSystemMediumFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 13 : 12.5);
+}
+
++(NSFont *)fontMedium11 {
+    return TGSystemMediumFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 12 : 11);
+}
++(NSFont *)fontMedium12 {
+    return TGSystemMediumFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 13 : 12);
+}
++(NSFont *)fontMedium13 {
+    return TGSystemMediumFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 14 : 13);
+}
++(NSFont *)fontMedium14 {
+    return TGSystemMediumFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 14);
+}
++(NSFont *)fontMedium15 {
+    return TGSystemMediumFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 16 : 15);
+}
+
++(NSFont *)fontBold11 {
+    return TGSystemBoldFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 13 : 11);
+}
++(NSFont *)fontBold12 {
+    return TGSystemBoldFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 14 : 12);
+}
++(NSFont *)fontBold13 {
+    return TGSystemBoldFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 13);
+}
++(NSFont *)fontBold14 {
+    return TGSystemBoldFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 16 : 14);
+}
++(NSFont *)fontBold15 {
+    return TGSystemBoldFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 17 : 15);
+}
+
 
 + (BOOL)setDocumentsFolder:(NSString *)folder {
    
@@ -250,6 +323,14 @@ static NSString *kArchivedSettings = @"kArchivedSettings";
     return isInList;
 }
 
++(BOOL)isDefaultEnabledESGLayout {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:@"isDefaultEnabledESGLayout"] && [SettingsArchiver checkMaskedSetting:ESGLayoutSettings];
+}
+
++(void)toggleDefaultEnabledESGLayout {
+    [[NSUserDefaults standardUserDefaults] setBool:![[NSUserDefaults standardUserDefaults] boolForKey:@"isDefaultEnabledESGLayout"] forKey:@"isDefaultEnabledESGLayout"];
+}
+
 + (void)toggleLaunchAtStartup {
     BOOL shouldBeToggled = ![self isLaunchAtStartup];
     LSSharedFileListRef loginItemsRef = LSSharedFileListCreate(NULL, kLSSharedFileListSessionLoginItems, NULL);
@@ -310,37 +391,11 @@ static NSString *kArchivedSettings = @"kArchivedSettings";
                 
             NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
             
-            if (![defaults objectForKey:@"check_push_once"]) {
-                [defaults setObject:@"once" forKey:@"check_push_once"];
-                
-                [SettingsArchiver addSetting:PushNotifications];
-            }
             
-            
-            if(![defaults objectForKey:@"icloud_sync_once"]) {
-                [defaults setObject:@"once" forKey:@"icloud_sync_once"];
+            if(![defaults objectForKey:@"stickerslayout"]) {
+                [defaults setObject:@"once" forKey:@"stickerslayout"];
                 
-                [SettingsArchiver addSetting:iCloudSynch];
-
-            }
-            
-            if(![defaults objectForKey:@"status_bar_sync_once"]) {
-                [defaults setObject:@"once" forKey:@"status_bar_sync_once"];
-                
-                [SettingsArchiver addSetting:StatusBarIcon];
-                
-            }
-            
-            if(![defaults objectForKey:@"SmartNotifications"]) {
-                [defaults setObject:@"once" forKey:@"SmartNotifications"];
-                
-                [SettingsArchiver addSetting:SmartNotifications];
-                
-            }
-            if(![defaults objectForKey:@"MarkedInputText"]) {
-                [defaults setObject:@"once" forKey:@"MarkedInputText"];
-                
-                [SettingsArchiver addSetting:MarkedInputText];    
+                [SettingsArchiver addSetting:ESGLayoutSettings];
             }
             
         });
@@ -348,6 +403,58 @@ static NSString *kArchivedSettings = @"kArchivedSettings";
     });
     
     return instance;
+}
+
+
+
++(void)requestPermissionWithKey:(NSString *)permissionKey peer_id:(int)peer_id handler:(void (^)(bool success))handler {
+    
+    static NSMutableDictionary *denied;
+    
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        denied =  [NSMutableDictionary dictionary];
+    });
+    
+    
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    
+    NSString *key = [NSString stringWithFormat:@"%@:%d",permissionKey,peer_id];
+    
+    BOOL access = [defaults boolForKey:key];
+    
+    
+    if(access) {
+        if(handler)
+            handler(access);
+    } else {
+        
+        if([denied[key] boolValue]) {
+            if(handler)
+                handler(NO);
+            return;
+        }
+        
+        NSString *localizeHeaderKey = [NSString stringWithFormat:@"Confirm.Header.%@",permissionKey];
+        NSString *localizeDescKey = [NSString stringWithFormat:@"Confirm.Desc.%@",permissionKey];
+        confirm(NSLocalizedString(localizeHeaderKey, nil), NSLocalizedString(localizeDescKey, nil), ^{
+            if(handler)
+                handler(YES);
+            
+            [defaults setBool:YES forKey:key];
+            [defaults synchronize];
+        }, ^{
+            if(handler)
+                handler(NO);
+            
+            [denied setValue:@(YES) forKey:key];
+            
+            [defaults setBool:NO forKey:key];
+            [defaults synchronize];
+        });
+    }
+    
 }
 
 @end

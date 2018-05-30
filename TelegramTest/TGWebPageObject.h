@@ -7,14 +7,14 @@
 //
 
 #import <Foundation/Foundation.h>
-
+@class MessageTableItem;
 @interface TGWebpageObject : NSObject
 
 @property (nonatomic,strong,readonly) NSAttributedString *title;
 @property (nonatomic,assign,readonly) NSSize titleSize;
 
 @property (nonatomic,strong,readonly) TGImageObject *imageObject;
-
+@property (nonatomic,strong,readonly) TGImageObject *roundObject;
 
 @property (nonatomic,strong,readonly) NSAttributedString *desc;
 @property (nonatomic,assign,readonly) NSSize descSize;
@@ -33,14 +33,18 @@
 @property (nonatomic,strong) NSAttributedString *siteName;
 
 
--(id)initWithWebPage:(TLWebPage *)webpage;
+@property (nonatomic,weak) MessageTableItem *tableItem;
+
+-(id)initWithWebPage:(TLWebPage *)webpage tableItem:(MessageTableItem *)item;
 
 
 -(void)makeSize:(int)width;
 -(int)blockHeight;
 -(Class)webpageContainer;
 
-+(id)objectForWebpage:(TLWebPage *)webpage;
++(id)objectForWebpage:(TLWebPage *)webpage tableItem:(MessageTableItem *)item;
+
+-(void)doAfterDownload;
 
 -(NSImage *)siteIcon;
 

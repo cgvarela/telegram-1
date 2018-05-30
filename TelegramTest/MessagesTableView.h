@@ -12,11 +12,11 @@
 @class MessagesViewController;
 
 @interface MessagesTableView : TMTableView
-@property (nonatomic, strong) MessagesViewController *viewController;
+@property (nonatomic, weak) MessagesViewController *viewController;
 
 - (NSSize)containerSize;
 
 - (void)clearSelection;
--(void)checkAndScroll:(NSPoint)point;
+-(void)checkStartScroll;
 
 @end

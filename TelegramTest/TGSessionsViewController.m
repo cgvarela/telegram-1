@@ -11,8 +11,9 @@
 #import "GeneralSettingsBlockHeaderView.h"
 #import "GeneralSettingsRowView.h"
 #import "TGTimer.h"
+#import "TGSettingsTableView.h"
 @interface TGSessionsViewController ()<TMTableViewDelegate>
-@property (nonatomic,strong) TMTableView *tableView;
+@property (nonatomic,strong) TGSettingsTableView *tableView;
 @property (nonatomic,strong) NSProgressIndicator *progressIndicator;
 
 @property (nonatomic,strong) NSMutableArray *authorizations;
@@ -30,9 +31,8 @@
     
     
     
-    self.tableView = [[TMTableView alloc] initWithFrame:self.view.bounds];
+    self.tableView = [[TGSettingsTableView alloc] initWithFrame:self.view.bounds];
     
-    self.tableView.tm_delegate = self;
     
     self.progressIndicator = [[TGProgressIndicator alloc] initWithFrame:NSMakeRect(0, 0, 35, 35)];
     
@@ -71,7 +71,7 @@
         if([[NSApplication sharedApplication] isActive])
             [self reload];
         
-    } queue:[ASQueue mainQueue].nativeQueue];
+    } queue:[ASQueue mainQueue]._dispatch_queue];
     
     [self.tableView removeAllItems:YES];
     
@@ -90,8 +90,8 @@
 -(void)reload {
     
     
-    
-    [RPCRequest sendRequest:[TLAPI_account_getAuthorizations create] successHandler:^(RPCRequest *request, TL_account_authorizations *response) {
+
+     [RPCRequest sendRequest:[TLAPI_account_getAuthorizations create] successHandler:^(RPCRequest *request, TL_account_authorizations *response) {
         
         [self.progressIndicator stopAnimation:self.view];
         [self.progressIndicator setHidden:YES];
@@ -107,11 +107,7 @@
         
         [response.authorizations enumerateObjectsUsingBlock:^(TL_authorization *obj, NSUInteger idx, BOOL *stop) {
             
-            
-            
             [self.authorizations addObject:[[TGSessionRowitem alloc] initWithObject:obj]];
-            
-            
             
         }];
         
@@ -131,9 +127,7 @@
     
     [self.tableView removeAllItems:NO];
     
-    GeneralSettingsBlockHeaderItem *selfHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"AuthSessions.CurrentSession", nil)];
-    
-    selfHeader.height = 62;
+    GeneralSettingsBlockHeaderItem *selfHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"AuthSessions.CurrentSession", nil) height:62 flipped:NO];
     
     [self.tableView insert:selfHeader atIndex:self.tableView.count tableRedraw:NO];
     
@@ -142,12 +136,12 @@
     
     
     
-    GeneralSettingsRowItem *terminate = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+    GeneralSettingsRowItem *terminate = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
         
         [self terminateSessions];
         
         
-    } description:NSLocalizedString(@"AuthSessions.TerminateOtherSessions", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+    } description:NSLocalizedString(@"AuthSessions.TerminateOtherSessions", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
         return @([SettingsArchiver checkMaskedSetting:AutoGroupAudio]);
     }];
     
@@ -156,9 +150,8 @@
     
     if(self.authorizations.count > 0) {
         
-        GeneralSettingsBlockHeaderItem *otherHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"AuthSessions.OtherSessions", nil)];
+        GeneralSettingsBlockHeaderItem *otherHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"AuthSessions.OtherSessions", nil) height:62 flipped:NO];
         
-        otherHeader.height = 62;
         
         [self.tableView insert:otherHeader atIndex:self.tableView.count tableRedraw:NO];
         
@@ -246,41 +239,8 @@
     _updateTimer = nil;
 }
 
-
-- (CGFloat)rowHeight:(NSUInteger)row item:(TMRowItem *) item {
-    if([item isKindOfClass:[GeneralSettingsRowItem class]] || [item isKindOfClass:[GeneralSettingsBlockHeaderItem class]]) {
-        return [(GeneralSettingsRowItem *)item height];
-    }
-    
-    return 60;
-}
-- (BOOL)isGroupRow:(NSUInteger)row item:(TMRowItem *) item {
-    return NO;
-}
-
-- (TMRowView *)viewForRow:(NSUInteger)row item:(TMRowItem *) item {
-    
-    if([item isKindOfClass:[GeneralSettingsRowItem class]]) {
-        return [self.tableView cacheViewForClass:[GeneralSettingsRowView class] identifier:@"GeneralSettingsRowView"];
-    }
-    
-    if([item isKindOfClass:[GeneralSettingsBlockHeaderItem class]]) {
-        return [self.tableView cacheViewForClass:[GeneralSettingsBlockHeaderView class] identifier:@"GeneralSettingsBlockHeaderView"];
-    }
-    
-    return [self.tableView cacheViewForClass:[TGSessionRowView class] identifier:@"TGSessionRowView" withSize:NSMakeSize(NSWidth(self.view.frame), 50)];
-}
-
-- (void)selectionDidChange:(NSInteger)row item:(TMRowItem *) item {
-    
-}
-
-- (BOOL)selectionWillChange:(NSInteger)row item:(TMRowItem *) item {
-    return NO;
-}
-
-- (BOOL)isSelectable:(NSInteger)row item:(TMRowItem *) item {
-    return NO;
+-(void)dealloc {
+    [_tableView clear];
 }
 
 @end

@@ -14,7 +14,6 @@
 #import "NSAttributedStringCategory.h"
 #import "CMath.h"
 #import "ImageUtils.h"
-#import "TMImageUtils.h"
 #import "TMView.h"
 #import "ASQueue.h"
 #import "MTProto.h"
@@ -22,7 +21,7 @@
 #import "NSViewCategory.h"
 #import "ClassStore.h"
 #import "TGS_RPCRequest.h"
-#import <MTProtoKit/MTLogging.h>
+#import <MtProtoKitMac/MTLogging.h>
 #import "TGHeader.h"
 #import "TGSAppManager.h"
 #endif

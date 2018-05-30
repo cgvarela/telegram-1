@@ -25,7 +25,7 @@
 
 #define kDisabledBorderColor NSColorFromRGB(0xD7D7D7) // [NSColor colorWithCalibratedWhite:0.f alpha:0.2f]
 #define kDisabledBackgroundColor NSColorFromRGB(0xD7D7D7)// [NSColor clearColor]
-#define kDefaultTintColor [NSColor colorWithCalibratedRed:0.27f green:0.86f blue:0.36f alpha:1.f]
+#define kDefaultTintColor BLUE_COLOR_SELECT
 
 
 
@@ -178,7 +178,7 @@
         //        _backgroundLayer.borderWidth = (YES || self.isActive || self.isOn) ? NSHeight(_backgroundLayer.bounds) / 2 : kBorderLineWidth;
         
         // ------------------------------- Animate Colors
-        if ((self.hasDragged && self.isDraggingTowardsOn) || (!self.hasDragged && self.isOn)) {
+        if ((self.hasDragged && self.isDraggingTowardsOn && self.isEnabled) || (!self.hasDragged && self.isOn && self.isEnabled)) {
             _backgroundLayer.borderColor = self.tintColor.CGColor;
             _backgroundLayer.backgroundColor = self.tintColor.CGColor;
         } else {
@@ -215,7 +215,6 @@
     kBorderLineWidth :
     NSWidth(_backgroundLayer.bounds) - width - kBorderLineWidth;
     
-   
     
     return (CGRect) {
         .size.width = width,
@@ -235,6 +234,7 @@
 }
 
 - (void)mouseDown:(NSEvent *)theEvent {
+    
     self.isActive = YES;
     
     [self updateLayer];
@@ -250,6 +250,12 @@
 }
 
 - (void)mouseUp:(NSEvent *)theEvent {
+    
+    [super mouseUp:theEvent];
+    
+    if(!self.isEnabled)
+        return;
+    
     self.isActive = NO;
     
     BOOL isOn = (!self.hasDragged) ? !self.isOn : self.isDraggingTowardsOn;
@@ -286,6 +292,12 @@
     _action = aSelector;
 }
 
+-(void)setEnabled:(BOOL)enabled {
+    [super setEnabled:enabled];
+    
+    
+}
+
 
 
 // ----------------------------------------------------
@@ -318,6 +330,8 @@
 }
 
 - (void)setOn:(BOOL)on animated:(BOOL)animated {
+    
+    
     _animationDuration = animated ? kAnimationDuration : 0;
    
     [self setOn:on];

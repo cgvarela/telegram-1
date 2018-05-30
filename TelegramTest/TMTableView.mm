@@ -22,6 +22,8 @@
 @property (nonatomic, strong)  NSTrackingArea *trackingArea;
 
 
+@property (nonatomic,strong) TMRowItem *currentStickItem;
+
 
 @end
 
@@ -50,7 +52,7 @@ static TMTableView *tableStatic;
 }
 
 - (id)initWithCoder:(NSCoder *)aDecoder {
-    self = [super init];
+    self = [super initWithCoder:aDecoder];
     if(self) {
         [self initialize];
     }
@@ -82,6 +84,8 @@ static TMTableView *tableStatic;
    
     
     self.scrollView.documentView = self;
+    
+    
     
    
     
@@ -120,6 +124,16 @@ static TMTableView *tableStatic;
     self.lastOverRow = -1;
     
     [self updateTrackingAreas];
+    
+    
+    
+    id document = self.scrollView.documentView;
+    BTRClipView *clipView = [[BTRClipView alloc] initWithFrame:self.scrollView.contentView.bounds];
+    [clipView setWantsLayer:YES];
+    [clipView setDrawsBackground:YES];
+    [self.scrollView setContentView:clipView];
+    self.scrollView.documentView = document;
+    
 }
 
 - (void)setHoverCells:(BOOL)hoverCells {
@@ -203,6 +217,7 @@ static TMTableView *tableStatic;
 	}
 }
 
+
 - (void)mouseMoved:(NSEvent*)theEvent
 {
     [super mouseMoved:theEvent];
@@ -213,18 +228,18 @@ static TMTableView *tableStatic;
 	[self checkHover];
 }
 
-- (NSObject *) isItemInList:(NSObject*)item {
+- (id) isItemInList:(id)item {
     NSUInteger hash = [item hash];
     return [self itemByHash:hash];
 }
 
-- (NSObject *)selectedItem {
+- (id)selectedItem {
     if(self.listSelectedElementHash != NSNotFound)
         return [self itemByHash:self.listSelectedElementHash];
     return nil;
 }
 
-- (NSObject *) itemByHash:(NSUInteger)hash {
+- (id) itemByHash:(NSUInteger)hash {
     std::map<NSUInteger, id>::iterator it = self.listCacheHash->find(hash);
     if(it != self.listCacheHash->end())
         return it->second;
@@ -240,21 +255,26 @@ static TMTableView *tableStatic;
     tableRedraw:(BOOL)tableRedraw {
     
     assert([NSThread currentThread] == [NSThread mainThread]);
-    
-    int count = 0;
-    for(NSObject* object in array) {
-        if([self insert:object atIndex:startIndex + count tableRedraw:NO]) {
-            count++;
-        } else {
-          //  MTLog(@"ne");
+    @try {
+        int count = 0;
+        for(NSObject* object in array) {
+            if([self insert:object atIndex:startIndex + count tableRedraw:NO]) {
+                count++;
+            } else {
+                //  MTLog(@"ne");
+            }
         }
+        
+        if(count && tableRedraw) {
+            [self beginUpdates];
+            [self insertRowsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(startIndex, count)] withAnimation:self.defaultAnimation];
+            [self endUpdates];
+        }
+    } @catch (NSException *exception) {
+        int bp = 0;
+        bp += 1;
     }
     
-    if(count && tableRedraw) {
-        [self beginUpdates];
-        [self insertRowsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(startIndex, count)] withAnimation:self.defaultAnimation];
-        [self endUpdates];
-    }
     return YES;
 }
 
@@ -263,23 +283,32 @@ static TMTableView *tableStatic;
     return [self insert:item atIndex:self.list.count tableRedraw:tableRedraw];
 }
 
+-(int)tableHeight {
+    return self.scrollView.documentSize.height;
+}
+
 - (BOOL) insert:(NSObject *)item
         atIndex:(NSUInteger)atIndex
     tableRedraw:(BOOL)tableRedraw {
-    
-    if([self isItemInList:item] != nil)
-        return NO;
-    
-    self.listCacheHash->insert(std::pair<NSUInteger, id>([item hash], item));
-    [self.list insertObject:item atIndex:atIndex];
-    TMRowItem *rowItem = (TMRowItem *)(item);
-    rowItem.table = self;
-    
-    if(tableRedraw) {
-        [self beginUpdates];
-        [self insertRowsAtIndexes:[NSIndexSet indexSetWithIndex:atIndex] withAnimation:self.defaultAnimation];
-        [self endUpdates];
+    @try {
+        if([self isItemInList:item] != nil)
+            return NO;
+        
+        self.listCacheHash->insert(std::pair<NSUInteger, id>([item hash], item));
+        [self.list insertObject:item atIndex:atIndex];
+        TMRowItem *rowItem = (TMRowItem *)(item);
+        rowItem.table = self;
+        rowItem.rowId = atIndex;
+        if(tableRedraw) {
+            [self beginUpdates];
+            [self insertRowsAtIndexes:[NSIndexSet indexSetWithIndex:atIndex] withAnimation:self.defaultAnimation];
+            [self endUpdates];
+        }
+    } @catch (NSException *exception) {
+        int bp = 0;
+        bp += 1;
     }
+    
     return YES;
 }
 
@@ -311,7 +340,10 @@ static TMTableView *tableStatic;
     
 }
 
-- (NSObject *) itemAtPosition:(NSUInteger)positionOfItem {
+- (id) itemAtPosition:(NSUInteger)positionOfItem {
+    if(self.count <= positionOfItem)
+        return nil;
+    
     return [self.list objectAtIndex:positionOfItem];
 }
 
@@ -341,6 +373,8 @@ static TMTableView *tableStatic;
     }
     return NO;
 }
+
+
 
 
 - (BOOL)removeAllItems:(BOOL)tableRedraw {
@@ -383,52 +417,56 @@ static TMTableView *tableStatic;
     
     if(theEvent.keyCode == 125 || theEvent.keyCode == 126 || theEvent.keyCode == 121 || theEvent.keyCode == 116) {
         
-        if([NSClassFromString(@"TMViewController") performSelector:@selector(isModalActive) withObject:nil])
-            return;
-        
-        NSUInteger pos = 0;
-        id item = [self itemByHash:self.listSelectedElementHash];
-        if(item) {
-            pos = [self positionOfItem:item];
-            if(pos == NSNotFound) {
-                pos = 0;
+        if((theEvent.modifierFlags & NSAlternateKeyMask) > 0 || (theEvent.modifierFlags & NSControlKeyMask) > 0)  {
+            if([NSClassFromString(@"TMViewController") performSelector:@selector(isModalActive) withObject:nil])
+                return;
+            
+            NSUInteger pos = 0;
+            id item = [self itemByHash:self.listSelectedElementHash];
+            if(item) {
+                pos = [self positionOfItem:item];
+                if(pos == NSNotFound) {
+                    pos = 0;
+                }
+                
+                
+                if(theEvent.keyCode == 125 || theEvent.keyCode == 121) {
+                    pos++;
+                } else {
+                    pos--;
+                }
             }
             
-            
-            if(theEvent.keyCode == 125 || theEvent.keyCode == 121) {
-                pos++;
-            } else {
-                pos--;
-            }
-        }
-        
-        while(true) {
-            if(self.count > pos && pos < NSNotFound) {
-                if([self.tm_delegate isSelectable:pos item:[self.list objectAtIndex:pos]]) {
+            while(true) {
+                if(self.count > pos && pos < NSNotFound) {
+                    if([self.tm_delegate isSelectable:pos item:[self.list objectAtIndex:pos]]) {
+                        break;
+                    }
+                } else {
                     break;
                 }
-            } else {
-                break;
+                
+                if(theEvent.keyCode == 125 || theEvent.keyCode == 121) {
+                    pos++;
+                } else {
+                    pos--;
+                }
             }
             
-            if(theEvent.keyCode == 125 || theEvent.keyCode == 121) {
-                pos++;
-            } else {
-                pos--;
+            
+            if(self.count > pos && pos < NSNotFound) {
+                [self selectRowIndexes:[NSIndexSet indexSetWithIndex:pos] byExtendingSelection:NO];
+                
+                int posS = (int)(pos + (theEvent.keyCode == 125 || theEvent.keyCode == 121 ? 1 : -1));
+                int count = (int)self.count - 1;
+                
+                int rowIndex = MAX(0, MIN(posS, count));
+                
+                [self scrollRowToVisible:rowIndex];
             }
-        }
 
+        } 
         
-        if(self.count > pos && pos < NSNotFound) {
-            [self selectRowIndexes:[NSIndexSet indexSetWithIndex:pos] byExtendingSelection:NO];
-            
-            int posS = (int)(pos + (theEvent.keyCode == 125 || theEvent.keyCode == 121 ? 1 : -1));
-            int count = (int)self.count - 1;
-            
-            int rowIndex = MAX(0, MIN(posS, count));
-            
-            [self scrollRowToVisible:rowIndex];
-        }
     }
 }
 
@@ -492,7 +530,7 @@ static TMTableView *tableStatic;
         self.listSelectionHash->clear();
     delete self.listCacheHash;
     delete self.listSelectionHash;
-    
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self removeTrackingArea:self.trackingArea];
 }
 
@@ -550,7 +588,7 @@ static TMTableView *tableStatic;
 
 - (NSView *)tableView:(NSTableView *)tableView
    viewForTableColumn:(NSTableColumn *)tableColumn
-                  row:(NSInteger)row {
+                  row:(NSInteger)row { 
     
     TMRowItem *item = [self.list objectAtIndex:row];
     
@@ -579,7 +617,8 @@ static TMTableView *tableStatic;
     
     [super mouseDown:theEvent];
     
-    [TMTableView setCurrent:self];
+    if(![self.className isEqualToString:@"TGRecentSearchTableView"] && ![self.className isEqualToString:@"TGSettingsTableView"])
+        [TMTableView setCurrent:self];
     
     if([self.className isEqualToString:@"TGConversationsTableView"] && !self.isHidden )
          [self.scrollView mouseDown:theEvent];
@@ -594,5 +633,162 @@ static TMTableView *tableStatic;
     if([self.className isEqualToString:@"TGConversationsTableView"] && !self.isHidden)
         [self.scrollView mouseDragged:theEvent];
 }
+
+-(BOOL)rowIsVisible:(NSUInteger)index {
+    NSRange range = [self rowsInRect:[self visibleRect]];
+    
+    return range.location <= index && range.location + range.length >= index;
+}
+
+-(void)clear {
+    _scrollView.documentView = nil;
+    [self removeScrollEvent];
+}
+
+
+-(void)setStickClass:(Class)stickClass {
+    _stickClass = stickClass;
+    if(stickClass != nil) {
+        
+        [self addScrollEvent];
+        
+        if(!_currentStickView) {
+            
+            __block TMRowItem *item;
+            [self.list enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                if([obj isKindOfClass:stickClass]) {
+                    item = obj;
+                    *stop = YES;
+                }
+            }];
+            
+            if(item) {
+                _currentStickItem = item;
+                _currentStickView = [[[item viewClass] alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(self.frame), item.height)];
+                [_currentStickView setValue:@(YES) forKey:@"isStickView"];
+                [_currentStickView setRowItem:item];
+                [_currentStickView redrawRow];
+                [self addSubview:_currentStickView];
+            }
+            
+            
+        }
+    
+        dispatch_async(dispatch_get_current_queue(), ^{
+            [self _didScrolledTableView:nil];
+        });
+        
+        
+        
+    } else {
+        [self removeScrollEvent];
+        [_currentStickView removeFromSuperview];
+        _currentStickView = nil;
+    }
+    
+}
+
+-(void)_didScrolledTableView:(NSNotification *)notification {
+    
+    
+
+    NSRange range = [self rowsInRect:[self visibleRect]];
+    
+    if(self.scrollView.documentSize.height > NSHeight(self.scrollView.frame)) {
+        NSUInteger stickIndex = range.location + 1;
+        
+        float yScrollOffset = self.scrollView.documentOffset.y - NSMinY(self.containerView.frame);
+
+        
+        TMRowItem *item = [self itemAtPosition:stickIndex];
+        
+//        
+        if(![item isKindOfClass:_stickClass]) {
+            
+            stickIndex++;
+            item = [self itemAtPosition:stickIndex];
+            
+        }
+        
+        
+        __block id currentStick;
+        
+        [self.list enumerateObjectsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, range.location + 1)] options:NSEnumerationReverse usingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+          
+            if([obj isKindOfClass:_stickClass]) {
+                currentStick = obj;
+                *stop = YES;
+            }
+            
+        }];
+        
+        if(_currentStickView && _currentStickView.rowItem != currentStick) {
+            [_currentStickView setRowItem:currentStick];
+            [_currentStickView redrawRow];
+        }
+        
+        if(item) {
+                        
+            if([self.subviews lastObject] != _currentStickView) {
+                [_currentStickView removeFromSuperview];
+                [self addSubview:_currentStickView];
+            }
+            
+            
+            if([item isKindOfClass:_stickClass]) {
+               
+                NSRect rect = [self rectOfRow:stickIndex]; 
+                float dif = MAX(MIN(0,yScrollOffset - NSMinY(rect)),-item.height);
+                float yTopOffset =  yScrollOffset  - (dif + item.height);
+                
+
+                
+                [_currentStickView setFrameOrigin:NSMakePoint(0, yTopOffset)];
+                [_currentStickView setValue:@(fabs(dif) == item.height) forKey:@"isStickView"];
+                
+
+            }else if(_currentStickView) {
+                
+                
+                //MIN(NSHeight(self.frame) - NSHeight(self.scrollView.frame),MAX(0,yScrollOffset))
+                [_currentStickView setFrameOrigin:NSMakePoint(0,  MAX(0,yScrollOffset))];
+               [_currentStickView setValue:@(YES) forKey:@"isStickView"];
+            }
+            
+
+            
+        }
+        
+    }
+    
+}
+
+
+-(void)addScrollEvent {
+    id clipView = [[self enclosingScrollView] contentView];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(_didScrolledTableView:)
+                                                 name:NSViewBoundsDidChangeNotification
+                                               object:clipView];
+    
+}
+
+-(void)removeScrollEvent {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+
+-(void)scrollToItem:(TMRowItem *)item animated:(BOOL)animated yOffset:(int)yOffset {
+    
+    NSRect rowRect = [self rectOfRow:[self indexOfItem:item]];
+    
+    NSPoint scrollOffset = self.scrollView.documentOffset;
+    
+    NSLog(@"%@",NSStringFromPoint(scrollOffset));
+    
+    [self.scrollView.clipView scrollRectToVisible:NSMakeRect(0, NSMinY(rowRect) + yOffset, NSWidth(rowRect),  NSHeight(self.scrollView.frame)) animated:animated];
+    
+}
+
 
 @end

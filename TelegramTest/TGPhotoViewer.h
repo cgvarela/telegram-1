@@ -11,15 +11,29 @@
 #import "TGPhotoViewerItem.h"
 #import "TGPVBehavior.h"
 #import "TGPVControls.h"
-@interface TGPhotoViewer : NSPanel
+@interface TGPhotoViewer : NSWindow
+
+typedef enum {
+    TGPhotoViewerMinStyle,
+    TGPhotoViewerFullStyle
+} TGPhotoViewerStyle;
 
 
 @property (nonatomic,strong,readonly) TGPVContainer *photoContainer;
 @property (nonatomic,strong,readonly) TGPVControls *controls;
 
+@property (nonatomic,assign,readonly) TGPhotoViewerStyle viewerStyle;
+
+
+@property (nonatomic,weak) TelegramWindow *invokeWindow;
+
 -(void)show:(PreviewObject *)item conversation:(TL_conversation *)conversation;
+-(void)show:(PreviewObject *)item conversation:(TL_conversation *)conversation isReversed:(BOOL)isReversed;
 -(void)show:(PreviewObject *)item user:(TLUser *)user;
 -(void)show:(PreviewObject *)item;
+-(void)showDocuments:(PreviewObject *)item conversation:(TL_conversation *)conversation;
+
+-(void)showChatPhotos:(PreviewObject *)item chat:(TLChat *)chat;
 
 -(void)prepareUser:(TLUser *)user;
 
@@ -39,4 +53,8 @@
 
 +(BOOL)isVisibility;
 
++(void)copyClipboard;
+
++(void)increaseZoom;
++(void)decreaseZoom;
 @end

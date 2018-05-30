@@ -20,7 +20,7 @@
 
 
 -(id)initWithFrame:(NSRect)frameRect {
-    if(self = [super init]) {
+    if(self = [super initWithFrame:frameRect]) {
         _frameRect = frameRect;
         _internalId = [[TGInternalObject alloc] init];
     }
@@ -33,21 +33,22 @@
     // Do view setup here.
 }
 - (void)viewWillAppear:(BOOL)animated {
-    
+    [super viewWillAppear:animated];
 }
 - (void)viewDidAppear:(BOOL)animated {
-    
+    [super viewDidAppear:animated];
 }
 - (void)viewWillDisappear:(BOOL)animated {
-    
+    [super viewWillDisappear:animated];
 }
 - (void)viewDidDisappear:(BOOL)animated {
-    
+    [super viewDidDisappear:animated];
 }
 
 
 - (void)loadView {
-    _view = [[TGView alloc] initWithFrame: _frameRect];
+    if(!_view)
+        _view = [[TGView alloc] initWithFrame: _frameRect];
     
 }
 

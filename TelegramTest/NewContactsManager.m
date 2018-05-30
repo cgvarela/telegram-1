@@ -12,6 +12,7 @@
 #import <zlib.h>
 
 #import "TGHashContact.h"
+#import "ContactsViewController.h"
 #define INIT_HASH_CHEKER() __block NSUInteger hash = self.contactsHash;
 #define HASH_CHECK() if(self.contactsHash != hash) return;
 
@@ -24,7 +25,7 @@
     static NewContactsManager *instance;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        instance = [[NewContactsManager alloc] initWithQueue:[[ASQueue alloc] initWithName:[NSStringFromClass([self class]) UTF8String]]];
+        instance = [[NewContactsManager alloc] initWithQueue:[ASQueue globalQueue]];
     });
     return instance;
 }
@@ -41,14 +42,20 @@
 
 -(void)userStatusChanged:(NSNotification *)notification
 {
-    [self.queue dispatchOnQueue:^{
-        [self sortAndNotify:YES];
-    }];
-    
+    if([[Telegram leftViewController].currentTabController isKindOfClass:[ContactsViewController class]]) {
+        [self.queue dispatchOnQueue:^{
+            [self sortAndNotify:YES];
+        }];
+    } 
 }
 
 - (void)protocolUpdated:(NSNotification *)notify {
     [self getStatuses:nil];
+    
+    NSLog(@"updated");
+    
+    int bp = 0;
+    
 }
 
 
@@ -60,18 +67,17 @@
         
         [[Storage manager] contacts:^(NSArray *contacts) {
             
-            [self add:contacts withCustomKey:@"user_id"];
-            
-           
-            
-            [Notification perform:CONTACTS_MODIFIED data:@{@"CONTACTS_RELOAD": self->list}];
-            
-            [self remoteCheckContacts:^{
+            [self.queue dispatchOnQueue:^{
+                [self add:contacts withCustomKey:@"user_id"];
                 
-                [self iCloudSync];
+                [Notification perform:CONTACTS_MODIFIED data:@{@"CONTACTS_RELOAD": self->list}];
                 
+                [self remoteCheckContacts:^{
+                    
+                    [self iCloudSync];
+                    
+                }];
             }];
-            
         }];
         
         
@@ -105,9 +111,14 @@
 
 -(void)sortAndNotify:(BOOL)notify
 {
+    
+    
+    
+    
     NSSortDescriptor * descriptor = [[NSSortDescriptor alloc] initWithKey:@"self.user.lastSeenTime" ascending:NO];
     
     [self->list sortUsingDescriptors:@[descriptor]];
+    
     
     if(notify)
     {
@@ -304,11 +315,11 @@
         
         [self removeContact:contact];
         
-        [[ASQueue mainQueue] dispatchOnQueue:^{
+        [ASQueue dispatchOnMainQueue:^{
             compleHandler(YES);
         }];
     } errorHandler:^(RPCRequest *request, RpcError *error) {
-        [[ASQueue mainQueue] dispatchOnQueue:^{
+        [ASQueue dispatchOnMainQueue:^{
             compleHandler(NO);
         }];
         
@@ -404,14 +415,14 @@
             
         }
         
-        [[ASQueue mainQueue] dispatchOnQueue:^{
+        [ASQueue dispatchOnMainQueue:^{
             callback(YES, importedContact, userContact);
         }];
         
         [Notification perform:CONTACTS_MODIFIED data:@{@"CONTACTS_RELOAD": self->list}];
     } errorHandler:^(RPCRequest *request, RpcError *error) {
         
-        [[ASQueue mainQueue] dispatchOnQueue:^{
+        [ASQueue dispatchOnMainQueue:^{
             callback(NO, nil, nil);
         }];
         

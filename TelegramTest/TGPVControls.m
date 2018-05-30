@@ -19,6 +19,9 @@
 @property (nonatomic,strong) BTRButton *moreButton;
 @property (nonatomic,strong) BTRButton *closeButton;
 @property (nonatomic, strong) TMMenuPopover *menuPopover;
+
+
+
 @end
 
 
@@ -31,7 +34,7 @@
 }
 
 -(void)update {
-     self.countTextField.alphaValue = 0.7;
+    self.countTextField.alphaValue = 0.7;
     [self.leftButton setAlphaValue:0.7];
     [self.rightButton setAlphaValue:0.7];
     [self.closeButton setAlphaValue:0.7];
@@ -51,10 +54,10 @@
             if([[TGPhotoViewer behavior] class] == [TGPVMediaBehavior class]) {
                 [[TGPhotoViewer viewer] hide];
                 
-                [[Telegram rightViewController] showCollectionPage:weakSelf.convertsation];
+                [appWindow().navigationController showInfoPage:weakSelf.convertsation];
             }
             
-           
+            
             
         } forControlEvents:BTRControlEventClick];
         
@@ -68,7 +71,7 @@
         
         self.backgroundColor = NSColorFromRGBWithAlpha(0x000000, 0.6);
         
-        [self.countTextField setFont:[NSFont fontWithName:@"HelveticaNeue-Bold" size:18]];
+        [self.countTextField setFont:TGSystemBoldFont(18)];
         
         [self.countTextField sizeToFit];
         
@@ -106,7 +109,7 @@
         [self.closeButton setImage:image_PhotoViewerClose() forControlState:BTRControlStateNormal];
         [self.closeButton setCenterByView:self];
         [self.closeButton setFrameOrigin:NSMakePoint(NSWidth(self.frame) - 60, NSMinY(self.closeButton.frame))];
-    
+        
         [self.leftButton addBlock:^(BTRControlEvents events) {
             [TGPhotoViewer prevItem];
         } forControlEvents:BTRControlEventClick];
@@ -116,13 +119,13 @@
         } forControlEvents:BTRControlEventClick];
         
         [self.moreButton addBlock:^(BTRControlEvents events) {
-                [weakSelf contextMenu];
+            [weakSelf contextMenu];
             
         } forControlEvents:BTRControlEventClick];
         
         [self.closeButton addBlock:^(BTRControlEvents events) {
-           
-             [[TGPhotoViewer viewer] close];
+            
+            [[TGPhotoViewer viewer] hide];
             
         } forControlEvents:BTRControlEventClick];
         
@@ -134,13 +137,14 @@
         [self addSubview:self.moreButton];
         [self addSubview:self.closeButton];
         
+        
     }
     
     return self;
 }
 
 - (void)reset {
-   [self.leftButton setAlphaValue:0.7];
+    [self.leftButton setAlphaValue:0.7];
     [self.rightButton setAlphaValue:0.7];
     [self.closeButton setAlphaValue:0.7];
     [self.moreButton setAlphaValue:0.7];
@@ -148,23 +152,23 @@
 }
 
 -(void)highlightControl:(TGPVControlHighlightType)type {
-
-
+    
+    
     [self reset];
     
     switch (type) {
         case TGPVControlHighLightClose:
-            [self.leftButton setAlphaValue:1];
-            break;
+        [self.leftButton setAlphaValue:1];
+        break;
         case TGPVControlHighLightNext:
-            [self.rightButton setAlphaValue:1];
-            break;
+        [self.rightButton setAlphaValue:1];
+        break;
         case TGPVControlHighLightPrev:
-            [self.closeButton setAlphaValue:1];
-            break;
-            
+        [self.closeButton setAlphaValue:1];
+        break;
+        
         default:
-            break;
+        break;
     }
 }
 
@@ -192,12 +196,12 @@
     SEL selector = NSSelectorFromString([NSString stringWithFormat:@"%@Menu",NSStringFromClass([[TGPhotoViewer behavior] class])]);
     
     if(![self respondsToSelector:selector])
-        return;
+    return;
     
     [self.moreButton setSelected:YES];
     
-   // if(!self.menuPopover) {
-        
+    // if(!self.menuPopover) {
+    
     [self.menuPopover close];
     
     
@@ -232,7 +236,13 @@
         NSMenuItem *photoDelete = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Delete", nil) withBlock:^(id sender) {
             
             if([UsersManager currentUser].photo.photo_id != [TGPhotoViewer currentItem].previewObject.msg_id) {
-                [RPCRequest sendRequest:[TLAPI_photos_deletePhotos createWithN_id:@[[TL_inputPhoto createWithN_id:[TGPhotoViewer currentItem].previewObject.msg_id access_hash:[TGPhotoViewer currentItem].previewObject.access_hash]]] successHandler:^(RPCRequest *request, id response) {
+                
+                PreviewObject *previewObject = [TGPhotoViewer currentItem].previewObject;
+                
+                TL_inputPhoto *inputPhoto = [TL_inputPhoto createWithN_id:previewObject.msg_id access_hash:previewObject.access_hash];
+                
+                
+                [RPCRequest sendRequest:[TLAPI_photos_deletePhotos createWithN_id:[@[inputPhoto] mutableCopy]] successHandler:^(RPCRequest *request, id response) {
                     
                     [TGPhotoViewer deleteItem:[TGPhotoViewer currentItem]];
                     
@@ -243,11 +253,11 @@
             } else {
                 
                 
-                [RPCRequest sendRequest:[TLAPI_photos_updateProfilePhoto createWithN_id:[TL_inputPhotoEmpty create] crop:[TL_inputPhotoCropAuto create]] successHandler:^(RPCRequest *request, id response) {
+                [RPCRequest sendRequest:[TLAPI_photos_updateProfilePhoto createWithN_id:[TL_inputPhotoEmpty create]] successHandler:^(RPCRequest *request, id response) {
                     
                     [SharedManager proccessGlobalResponse:response];
                     
-                     [TGPhotoViewer deleteItem:[TGPhotoViewer currentItem]];
+                    [TGPhotoViewer deleteItem:[TGPhotoViewer currentItem]];
                     
                     
                 } errorHandler:^(RPCRequest *request, RpcError *error) {
@@ -255,10 +265,10 @@
                     
                     
                 } timeout:10];
-
+                
                 
             }
-             
+            
             
         }];
         // [photoDelete setImage:image_AttachPhotoVideo()];
@@ -283,7 +293,7 @@
                  
                  NSString *itemUrl = locationFilePath([TGPhotoViewer currentItem].imageObject.location, @"jpg");
                  
-                 if ( [[NSFileManager defaultManager] isReadableFileAtPath:itemUrl] ) {
+                 if ( [[NSFileManager defaultManager] isReadableFileAtPath:[itemUrl stringByDeletingLastPathComponent]] ) {
                      [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:itemUrl] toURL:file error:nil];
                  }
                  
@@ -292,8 +302,7 @@
              }
              
          }];
-        
-        
+
     }];
     //  [photoSave setImage:image_AttachFile()];
     // [photoSave setHighlightedImage:image_AttachFileHighlighted()];
@@ -304,7 +313,11 @@
         
         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
         [pasteboard clearContents];
-        [pasteboard writeObjects:[NSArray arrayWithObject:[NSURL fileURLWithPath:locationFilePath([TGPhotoViewer currentItem].imageObject.location, @"jpg")]]];
+        
+        TL_localMessage *msg = [TGPhotoViewer currentItem].previewObject.media;
+
+        
+        [pasteboard writeObjects:@[[NSURL fileURLWithPath:mediaFilePath(msg)]]];
         
         
     }];
@@ -320,6 +333,9 @@
 
 
 -(NSMenu *)TGPVMediaBehaviorMenu {
+    
+    
+    
     NSMenu *theMenu = [[NSMenu alloc] init];
     
     
@@ -328,39 +344,246 @@
     
     NSMenuItem *photoDelete = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Delete", nil) withBlock:^(id sender) {
         
-        
-        
-        [Notification perform:MESSAGE_DELETE_EVENT data:@{KEY_MESSAGE_ID_LIST:@[@(msg.n_id)]}];
+        [[DialogsManager sharedManager] deleteMessagesWithRandomMessageIds:@[@(msg.randomId)] isChannelMessages:msg.isChannelMessage];
         
         
     }];
-   // [photoDelete setImage:image_AttachPhotoVideo()];
-   // [photoDelete setHighlightedImage:image_AttachPhotoVideoHighlighted()];
+    // [photoDelete setImage:image_AttachPhotoVideo()];
+    // [photoDelete setHighlightedImage:image_AttachPhotoVideoHighlighted()];
+    
+    if([MessagesViewController canDeleteMessages:@[msg] inConversation:msg.conversation])
     [theMenu addItem:photoDelete];
+    
+    
     
     
     if(msg.conversation.type != DialogTypeSecretChat) {
         NSMenuItem *photoForward = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Forward", nil) withBlock:^(id sender) {
             
             
-            [[Telegram rightViewController] showByDialog:msg.conversation sender:[TGPhotoViewer viewer]];
-            [[Telegram rightViewController].messagesViewController setState:MessagesViewControllerStateNone];
-            [[Telegram rightViewController].messagesViewController unSelectAll:NO];
+            [[TGPhotoViewer viewer].invokeWindow.navigationController showMessagesViewController:msg.conversation];
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController setState:MessagesViewControllerStateNone];
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController unSelectAll:NO];
             
             MessageTableItem *item  = [MessageTableItem messageItemFromObject:msg];
             
-            [[Telegram rightViewController].messagesViewController setSelectedMessage:item selected:YES];
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController setSelectedMessage:item selected:YES];
             
-            
-            [[Telegram rightViewController] showForwardMessagesModalView:_convertsation messagesCount:1];
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController showForwardMessagesModalView];
             
             [[TGPhotoViewer viewer] hide];
             
             
         }];
-        //[photoForward setImage:image_AttachTakePhoto()];
-        //[photoForward setHighlightedImage:image_AttachTakePhotoHighlighted()];
+        
         [theMenu addItem:photoForward];
+        
+        NSMenuItem *photoSave = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.SaveAs", nil) withBlock:^(id sender) {
+            
+            
+            NSSavePanel *savePanel = [NSSavePanel savePanel];
+            
+            NSDateFormatter* dateFormatter = [[NSDateFormatter alloc] init];
+            dateFormatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+            
+            [savePanel setNameFieldStringValue:[NSString stringWithFormat:@"IMG_%@.jpg",[dateFormatter stringFromDate:[NSDate date]]]];
+            [savePanel beginSheetModalForWindow:[TGPhotoViewer viewer] completionHandler:^(NSInteger result)
+             {
+                 if (result == NSFileHandlingPanelOKButton) {
+                     NSURL *file = [savePanel URL];
+                     
+                     NSString *itemUrl = mediaFilePath([TGPhotoViewer currentItem].previewObject.media);
+                     
+                     if ( [[NSFileManager defaultManager] isReadableFileAtPath:[itemUrl stringByDeletingLastPathComponent]] ) {
+                         [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:itemUrl] toURL:file error:nil];
+                     }
+                     
+                 } else if(result == NSFileHandlingPanelCancelButton) {
+                     
+                 }
+                 
+             }];
+            
+            
+        }];
+        
+        [theMenu addItem:photoSave];
+        
+        
+        NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+            
+            TL_localMessage *msg = [TGPhotoViewer currentItem].previewObject.media;
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController showMessagesViewController:msg.conversation withMessage:msg];
+            
+            
+            [[TGPhotoViewer viewer] hide];
+            
+        }];
+        
+        [theMenu addItem:photoGoto];
+        
+        NSMenuItem *copy = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.CopyToClipBoard", nil) withBlock:^(id sender) {
+            
+            NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+            [pasteboard clearContents];
+            
+            
+            [pasteboard writeObjects:@[[NSURL fileURLWithPath:mediaFilePath(msg)]]];
+            
+            
+        }];
+        
+        
+        
+        [theMenu addItem:copy];
+        
+    }
+    
+    
+    
+    
+    return theMenu;
+}
+
+-(NSMenu *)TGPVDocumentsBehaviorMenu {
+    
+    
+    
+    NSMenu *theMenu = [[NSMenu alloc] init];
+    
+    
+    TL_localMessage *msg = [TGPhotoViewer currentItem].previewObject.media;
+    
+    
+    NSMenuItem *photoDelete = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Delete", nil) withBlock:^(id sender) {
+        
+        [[DialogsManager sharedManager] deleteMessagesWithRandomMessageIds:@[@(msg.randomId)] isChannelMessages:msg.isChannelMessage];
+        
+        
+    }];
+    // [photoDelete setImage:image_AttachPhotoVideo()];
+    // [photoDelete setHighlightedImage:image_AttachPhotoVideoHighlighted()];
+    
+    if([MessagesViewController canDeleteMessages:@[msg] inConversation:msg.conversation])
+        [theMenu addItem:photoDelete];
+    
+    
+    
+    
+    if(msg.conversation.type != DialogTypeSecretChat) {
+        NSMenuItem *photoForward = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Forward", nil) withBlock:^(id sender) {
+            
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController showMessagesViewController:msg.conversation];
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController setState:MessagesViewControllerStateNone];
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController unSelectAll:NO];
+            
+            MessageTableItem *item  = [MessageTableItem messageItemFromObject:msg];
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController setSelectedMessage:item selected:YES];
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController.messagesViewController showForwardMessagesModalView];
+            
+            [[TGPhotoViewer viewer] hide];
+            
+            
+        }];
+        
+        [theMenu addItem:photoForward];
+        
+        NSMenuItem *photoSave = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.SaveAs", nil) withBlock:^(id sender) {
+            
+            
+            NSSavePanel *savePanel = [NSSavePanel savePanel];
+            
+            NSDateFormatter* dateFormatter = [[NSDateFormatter alloc] init];
+            dateFormatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+            
+            NSString *itemUrl = mediaFilePath([TGPhotoViewer currentItem].previewObject.media);
+            
+            [savePanel setNameFieldStringValue:[itemUrl lastPathComponent]];
+            [savePanel beginSheetModalForWindow:[TGPhotoViewer viewer] completionHandler:^(NSInteger result)
+             {
+                 if (result == NSFileHandlingPanelOKButton) {
+                     NSURL *file = [savePanel URL];
+                     
+                     
+                     if ( [[NSFileManager defaultManager] isReadableFileAtPath:[itemUrl stringByDeletingLastPathComponent]] ) {
+                         [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:itemUrl] toURL:file error:nil];
+                     }
+                     
+                 } else if(result == NSFileHandlingPanelCancelButton) {
+                     
+                 }
+                 
+             }];
+            
+            
+        }];
+        
+        [theMenu addItem:photoSave];
+        
+        
+        NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+            
+            TL_localMessage *msg = [TGPhotoViewer currentItem].previewObject.media;
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController showMessagesViewController:msg.conversation withMessage:msg];
+
+            [[TGPhotoViewer viewer] hide];
+            
+        }];
+        
+        [theMenu addItem:photoGoto];
+        
+        NSMenuItem *copy = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.CopyToClipBoard", nil) withBlock:^(id sender) {
+            
+            NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+            [pasteboard clearContents];
+            [pasteboard writeObjects:@[[NSURL fileURLWithPath:mediaFilePath(msg)]]];
+            
+        }];
+        
+        
+        
+        [theMenu addItem:copy];
+        
+    }
+    
+    
+    
+    
+    return theMenu;
+}
+
+-(NSMenu *)TGPVChatPhotoBehaviorMenu {
+    
+    
+    
+    NSMenu *theMenu = [[NSMenu alloc] init];
+    
+    
+    TL_photoSize *size = [TGPhotoViewer currentItem].previewObject.media;
+    TL_localMessage *msg = [TGPhotoViewer currentItem].previewObject.reservedObject;
+    
+    if(msg) {
+             
+        
+        NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+            
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController showMessagesViewController:msg.conversation withMessage:msg];
+            
+            [[TGPhotoViewer viewer] hide];
+            
+        }];
+        
+        [theMenu addItem:photoGoto];
+        
+        
     }
     
     NSMenuItem *photoSave = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.SaveAs", nil) withBlock:^(id sender) {
@@ -373,46 +596,33 @@
         
         [savePanel setNameFieldStringValue:[NSString stringWithFormat:@"IMG_%@.jpg",[dateFormatter stringFromDate:[NSDate date]]]];
         [savePanel beginSheetModalForWindow:[TGPhotoViewer viewer] completionHandler:^(NSInteger result)
-        {
-            if (result == NSFileHandlingPanelOKButton) {
-                NSURL *file = [savePanel URL];
-                
-                NSString *itemUrl = mediaFilePath([(TL_localMessage *)[TGPhotoViewer currentItem].previewObject.media media]);
-                
-                if ( [[NSFileManager defaultManager] isReadableFileAtPath:itemUrl] ) {
-                    [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:itemUrl] toURL:file error:nil];
-                }
-                
-            } else if(result == NSFileHandlingPanelCancelButton) {
-                
-            }
-            
-        }];
+         {
+             if (result == NSFileHandlingPanelOKButton) {
+                 NSURL *file = [savePanel URL];
+                 
+                 NSString *itemUrl = size.location.path;
+                 
+                 if ( [[NSFileManager defaultManager] isReadableFileAtPath:[itemUrl stringByDeletingLastPathComponent]] ) {
+                     [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:itemUrl] toURL:file error:nil];
+                 }
+                 
+             } else if(result == NSFileHandlingPanelCancelButton) {
+                 
+             }
+             
+         }];
         
         
     }];
-  //  [photoSave setImage:image_AttachFile()];
-   // [photoSave setHighlightedImage:image_AttachFileHighlighted()];
     
     [theMenu addItem:photoSave];
     
-    
-    NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
-        
-        [[Telegram rightViewController] showByDialog:_convertsation withJump:(int)[TGPhotoViewer currentItem].previewObject.msg_id historyFilter:[HistoryFilter class] sender:[TGPhotoViewer viewer]];
-        
-        [[TGPhotoViewer viewer] hide];
-        
-    }];
-    
-     [theMenu addItem:photoGoto];
     
     NSMenuItem *copy = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.CopyToClipBoard", nil) withBlock:^(id sender) {
         
         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
         [pasteboard clearContents];
-        [pasteboard writeObjects:[NSArray arrayWithObject:[NSURL fileURLWithPath:locationFilePath([TGPhotoViewer currentItem].imageObject.location, @"jpg")]]];
-
+        [pasteboard writeObjects:@[[NSURL fileURLWithPath:size.location.path]]];
         
     }];
     
@@ -422,9 +632,92 @@
     
     
     
+    
+    
     return theMenu;
 }
 
+-(NSMenu *)TGPVEmptyBehaviorMenu {
+    
+    
+    
+    NSMenu *theMenu = [[NSMenu alloc] init];
+    
+    
+    TL_localMessage *msg = [TGPhotoViewer currentItem].previewObject.reservedObject1;
+    
+    
+    if(msg) {
+        
+        
+        NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+            
+            
+            [[TGPhotoViewer viewer].invokeWindow.navigationController showMessagesViewController:msg.conversation withMessage:msg];
+            
+            [[TGPhotoViewer viewer] hide];
+            
+        }];
+        
+        [theMenu addItem:photoGoto];
+        
+        
+    }
+    
+    if([TGPhotoViewer currentItem].path != nil) {
+        NSMenuItem *photoSave = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.SaveAs", nil) withBlock:^(id sender) {
+            
+            
+            NSSavePanel *savePanel = [NSSavePanel savePanel];
+            
+            NSDateFormatter* dateFormatter = [[NSDateFormatter alloc] init];
+            dateFormatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+            
+            [savePanel setNameFieldStringValue:[[TGPhotoViewer currentItem].path lastPathComponent]];
+            [savePanel beginSheetModalForWindow:[TGPhotoViewer viewer] completionHandler:^(NSInteger result)
+             {
+                 if (result == NSFileHandlingPanelOKButton) {
+                     NSURL *file = [savePanel URL];
+                     
+                     NSString *itemUrl =  [TGPhotoViewer currentItem].path;
+                     
+                     if ( [[NSFileManager defaultManager] isReadableFileAtPath:[itemUrl stringByDeletingLastPathComponent]] ) {
+                         [[NSFileManager defaultManager] copyItemAtURL:[NSURL fileURLWithPath:itemUrl] toURL:file error:nil];
+                     }
+                     
+                 } else if(result == NSFileHandlingPanelCancelButton) {
+                     
+                 }
+                 
+             }];
+            
+            
+        }];
+        
+        [theMenu addItem:photoSave];
+        
+        
+        NSMenuItem *copy = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.CopyToClipBoard", nil) withBlock:^(id sender) {
+            
+            NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+            [pasteboard clearContents];
+            [pasteboard writeObjects:@[[NSURL fileURLWithPath:[TGPhotoViewer currentItem].path]]];
+            
+        }];
+        
+        
+        
+        [theMenu addItem:copy];
+    }
+    
+    
+    
+    
+    
+    
+    
+    return theMenu;
+}
 
 
 -(void)mouseDown:(NSEvent *)theEvent {

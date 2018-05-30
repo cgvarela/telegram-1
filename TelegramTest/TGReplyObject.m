@@ -9,158 +9,285 @@
 #import "TGReplyObject.h"
 #import "MessagesUtils.h"
 #import "NSString+Extended.h"
+#import "MessageTableItem.h"
+#import "TGArticleImageObject.h"
+#import "TGExternalImageObject.h"
+@interface TGReplyObject ()
+@property (nonatomic,strong) RPCRequest *request;
+@end
+
 @implementation TGReplyObject
 
--(id)initWithReplyMessage:(TL_localMessage *)replyMessage {
+-(id)initWithReplyMessage:(TL_localMessage *)replyMessage fromMessage:(TL_localMessage *)fromMessage tableItem:(MessageTableItem *)item {
+    return [self initWithReplyMessage:replyMessage fromMessage:fromMessage tableItem:item withoutCache:NO];
+}
+
+-(id)initWithReplyMessage:(TL_localMessage *)replyMessage fromMessage:(TL_localMessage *)fromMessage tableItem:(MessageTableItem *)item editMessage:(BOOL)editMessage {
+    return [self initWithReplyMessage:replyMessage fromMessage:fromMessage tableItem:item withoutCache:YES pinnedMessage:NO editMessage:editMessage];
+}
+
+-(id)initWithReplyMessage:(TL_localMessage *)replyMessage fromMessage:(TL_localMessage *)fromMessage tableItem:(MessageTableItem *)item pinnedMessage:(BOOL)pinnedMessage {
+    return [self initWithReplyMessage:replyMessage fromMessage:fromMessage tableItem:item withoutCache:YES pinnedMessage:pinnedMessage editMessage:NO];
+}
+
+-(id)initWithReplyMessage:(TL_localMessage *)replyMessage fromMessage:(TL_localMessage *)fromMessage tableItem:(MessageTableItem *)item withoutCache:(BOOL)withoutCache  {
+    return [self initWithReplyMessage:replyMessage fromMessage:fromMessage tableItem:item withoutCache:withoutCache pinnedMessage:NO editMessage:NO];
+}
+
+-(id)initWithReplyMessage:(TL_localMessage *)replyMessage fromMessage:(TL_localMessage *)fromMessage tableItem:(MessageTableItem *)item withoutCache:(BOOL)withoutCache pinnedMessage:(BOOL)pinnedMessage editMessage:(BOOL)editMessage {
     if(self = [super init]) {
         
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            replyCache = [[NSCache alloc] init];
+            [replyCache setCountLimit:150];
+        });
+        
+        if(replyMessage != nil && !withoutCache) {
+            TGReplyObject *cObj = [replyCache objectForKey:@(replyMessage.channelMsgId)];
+            if(cObj && !cObj.isPinnedMessage)
+                return cObj;
+        }
+        
+        _pinnedMessage = pinnedMessage;
+        _editMessage = editMessage;
+        
+        _item = item;
+        _fromMessage = fromMessage;
         _replyMessage = replyMessage;
         
+        _containerHeight = 30;
         
-        NSColor *nameColor = LINK_COLOR;
-        
-//        static NSColor * colors[6];
-//        static NSMutableDictionary *cacheColorIds;
-//        
-//        static dispatch_once_t onceToken;
-//        dispatch_once(&onceToken, ^{
-//            colors[0] = NSColorFromRGB(0xce5247);
-//            colors[1] = NSColorFromRGB(0xcda322);
-//            colors[2] = NSColorFromRGB(0x5eaf33);
-//            colors[3] = NSColorFromRGB(0x468ec4);
-//            colors[4] = NSColorFromRGB(0xac6bc8);
-//            colors[5] = NSColorFromRGB(0xe28941);
-//            
-//            cacheColorIds = [[NSMutableDictionary alloc] init];
-//        });
-//        
-//        
-//        if(replyMessage.from_id != [UsersManager currentUserId]) {
-//            
-//            int colorMask = [TMAvatarImageView colorMask:replyMessage.fromUser];
-//            
-//            nameColor = colors[colorMask % (sizeof(colors) / sizeof(colors[0]))];
-//            
-//        }
-        
-        
-        //NSString *name = replyMessage.fwd_from_id != 0 ? replyMessage.fromFwdUser.fullName : replyMessage.fromUser.fullName;
-        
-        NSString *name = replyMessage.fromUser.fullName;
-        
-        NSMutableAttributedString *replyHeader = [[NSMutableAttributedString alloc] init];
-        
-        [replyHeader appendString:name withColor:nameColor];
-        
-        [replyHeader setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:13] forRange:replyHeader.range];
-        
-        [replyHeader addAttribute:NSLinkAttributeName value:[TMInAppLinks userProfile:replyMessage.fwd_from_id != 0 ? replyMessage.fwd_from_id : replyMessage.from_id] range:replyHeader.range];
-        
-        _replyHeader = replyHeader;
-        
-        
-        NSMutableAttributedString *replyText = [[NSMutableAttributedString alloc] init];
-        
-        if([replyMessage.media isKindOfClass:[TL_messageMediaEmpty class]] || [replyMessage.media isKindOfClass:[TL_messageMediaWebPage class]]) {
-            
-            NSString *str = [replyMessage.message stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-            
-            [replyText appendString:[str fixEmoji] withColor:TEXT_COLOR];
-            
-        } else {
-            [replyText appendString:[[MessagesUtils mediaMessage:replyMessage] fixEmoji] withColor:GRAY_TEXT_COLOR];
-        }
-        
-        
-        if([replyMessage.media isKindOfClass:[TL_messageMediaPhoto class]]) {
-            
-            NSImage *thumb;
-            
-            TLPhoto *photo = replyMessage.media.photo;
-            
-            
-            for(TLPhotoSize *photoSize in photo.sizes) {
-                if([photoSize isKindOfClass:[TL_photoCachedSize class]]) {
-                    thumb = [[NSImage alloc] initWithData:photoSize.bytes];
-                    break;
-                }
-            }
-            
-            TLPhotoSize *photoSize = photo.sizes[0];
-            
-            
-            
-            _replyThumb = [[TGImageObject alloc] initWithLocation:!thumb ? photoSize.location : nil placeHolder:thumb];
-            
-            _replyThumb.imageSize = strongsize(NSMakeSize(photoSize.w, photoSize.h), 30);
-            
-        }
-        
-        if([replyMessage.media isKindOfClass:[TL_messageMediaGeo class]]) {
-            
-          //  _geoURL = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.googleapis.com/maps/api/staticmap?center=%f,%f&zoom=15&size=%@&sensor=true",replyMessage.media.geo.lat, replyMessage.media.geo.n_long, @"30x30"]];
-            
-            
-        }
-        
-        if([replyMessage.media isKindOfClass:[TL_messageMediaVideo class]]) {
-            
-            TLPhotoSize *photoSize = replyMessage.media.video.thumb;
-            
-            NSImage *thumb;
-            if([photoSize isKindOfClass:[TL_photoCachedSize class]]) {
-                thumb = [[NSImage alloc] initWithData:photoSize.bytes];
-            }
-            
-            
-            
-            _replyThumb = [[TGImageObject alloc] initWithLocation:!thumb ? photoSize.location : nil placeHolder:thumb];
-            
-            _replyThumb.imageSize = strongsize(NSMakeSize(photoSize.w, photoSize.h), 30);
-            
-        }
-        
-        if([replyMessage.media isKindOfClass:[TL_messageMediaDocument class]]) {
-            
-            if(![replyMessage.media.document isSticker]) {
+        if(_replyMessage != nil) {
+            [self updateObject];
+        }  else
+            [TGReplyObject loadReplyMessage:_fromMessage completionHandler:^(TL_localMessage *message) {
+                _replyMessage = message;
+                _fromMessage.replyMessage = _replyMessage;
+                [self updateObject];
                 
-                if(replyMessage.media.document.thumb && ![replyMessage.media.document.thumb isKindOfClass:[TL_photoSizeEmpty class]]) {
-                    
-                    NSImage *thumb;
-                    
-                    if(replyMessage.media.document.thumb.bytes) {
-                        thumb = [[NSImage alloc] initWithData:replyMessage.media.document.thumb.bytes];
-                        thumb = renderedImage(thumb, strongsize(NSMakeSize(replyMessage.media.document.thumb.w, replyMessage.media.document.thumb.h), 30));
-                    }
-                    
-                    _replyThumb = [[TGImageObject alloc] initWithLocation:!thumb ? replyMessage.media.document.thumb.location : nil placeHolder:thumb];
-                    
-                    _replyThumb.imageSize = strongsize(NSMakeSize(replyMessage.media.document.thumb.w, replyMessage.media.document.thumb.h), 30);
-                    
-                }
+                [replyCache setObject:self forKey:@(_replyMessage.channelMsgId)];
                 
-            }
-        }
-        
-        
-       
-        NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
-        style.lineBreakMode = NSLineBreakByTruncatingTail;
-        
-        [replyText addAttribute:NSParagraphStyleAttributeName value:style range:replyText.range];
-        
-        [replyText setFont:[NSFont fontWithName:@"HelveticaNeue" size:13] forRange:replyText.range];
-        
-        _replyText = replyText;
-        
-        
-        _replyHeight = [_replyText coreTextSizeForTextFieldForWidth:INT32_MAX].height;
-        
-        _containerHeight = 15 + _replyHeight;
+                if(_item != nil) {
+                    [Notification perform:UPDATE_EDITED_MESSAGE data:@{KEY_MESSAGE:_fromMessage,@"nonselect":@"YES"}];
+                }
+            }];
         
     }
     
     return self;
+}
+
+static NSCache *replyCache;
+
+
+
+
+-(void)updateObject {
+    
+    if([_replyMessage isKindOfClass:[TL_localEmptyMessage class]]) {
+        _item.replyObject = nil;
+        return;
+    }
+    
+    NSColor *nameColor = LINK_COLOR;
+    
+    NSString *name = self.isPinnedMessage ? NSLocalizedString(@"PinnedHeaderMessage", nil) : self.isEditMessage ? NSLocalizedString(@"EditHeaderMessage", nil) : (_replyMessage.isPost ? _replyMessage.chat.title : _replyMessage.fromUser.fullName);
+    
+    
+    NSMutableAttributedString *replyHeader = [[NSMutableAttributedString alloc] init];
+    
+    [replyHeader appendString:name withColor:nameColor];
+    
+    [replyHeader setFont:[SettingsArchiver fontMedium125] forRange:replyHeader.range];
+    
+  //  [replyHeader addAttribute:NSLinkAttributeName value:[TMInAppLinks peerProfile:_replyMessage.fwd_from_id != nil ? _replyMessage.fwd_from_id : [TL_peerUser createWithUser_id:_replyMessage.from_id]] range:replyHeader.range];
+    
+    _replyHeader = replyHeader;
+    
+    
+    NSMutableAttributedString *replyText = [[NSMutableAttributedString alloc] init];
+    
+    if((_replyMessage.media == nil || [_replyMessage.media isKindOfClass:[TL_messageMediaEmpty class]]) || [_replyMessage.media isKindOfClass:[TL_messageMediaWebPage class]]) {
+        
+        if(![_replyMessage isKindOfClass:[TL_localMessageService class]]) {
+            [replyText appendString:[[[_replyMessage.message stringByReplacingOccurrencesOfString:@"\n" withString:@" "] fixEmoji] trim] withColor:TEXT_COLOR];
+        } else {
+            [replyText appendString:[MessagesUtils serviceMessage:_replyMessage forAction:_replyMessage.action] withColor:GRAY_TEXT_COLOR];
+        }
+        
+    } else {
+        if(self.isPinnedMessage) {
+            NSString *caption = _replyMessage.media.caption;
+            _replyMessage.media.caption = @"";
+            [replyText appendString:[[[MessagesUtils mediaMessage:_replyMessage] stringByReplacingOccurrencesOfString:@"\n" withString:@" "] fixEmoji] withColor:GRAY_TEXT_COLOR];
+            _replyMessage.media.caption = caption;
+        } else
+            [replyText appendString:[[[MessagesUtils mediaMessage:_replyMessage] stringByReplacingOccurrencesOfString:@"\n" withString:@" "] fixEmoji] withColor:GRAY_TEXT_COLOR];
+    }
+    
+    
+    NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+    style.lineBreakMode = NSLineBreakByTruncatingTail;
+    
+    [replyText addAttribute:NSParagraphStyleAttributeName value:style range:replyText.range];
+    
+    [replyText setFont:[SettingsArchiver font125] forRange:replyText.range];
+    
+    _replyText = replyText;
+    
+    _replyHeight = [_replyText coreTextSizeOneLineForWidth:INT32_MAX].height;
+    
+    _replyHeaderHeight = [replyHeader coreTextSizeOneLineForWidth:INT32_MAX].height;
+    
+    _containerHeight = _replyHeaderHeight + _replyHeight + 2;
+    
+    if([_replyMessage.media isKindOfClass:[TL_messageMediaPhoto class]]) {
+        
+        NSImage *thumb;
+        
+        TLPhoto *photo = _replyMessage.media.photo;
+        
+        
+        for(TLPhotoSize *photoSize in photo.sizes) {
+            if([photoSize isKindOfClass:[TL_photoCachedSize class]]) {
+                thumb = [[NSImage alloc] initWithData:photoSize.bytes];
+                break;
+            }
+        }
+        
+        TLPhotoSize *photoSize = photo.sizes[0];
+        
+        _replyThumb = [[TGArticleImageObject alloc] initWithLocation:!thumb ? photoSize.location : nil placeHolder:thumb];
+        
+        _replyThumb.imageSize = NSMakeSize(_containerHeight-2, _containerHeight-2);
+        
+    }
+    
+    if ([_replyMessage.media isKindOfClass:[TL_messageMediaGame class]]) {
+        
+        TLPhotoSize *photoSize = [_replyMessage.media.game.photo.sizes firstObject];
+        if (photoSize) {
+            _replyThumb = [[TGArticleImageObject alloc] initWithLocation:photoSize.location placeHolder:nil];
+            _replyThumb.imageSize = NSMakeSize(_containerHeight-2, _containerHeight-2);
+        }
+        
+    }
+    
+    if([_replyMessage.media isKindOfClass:[TL_messageMediaGeo class]]) {
+        
+        _replyThumb = [[TGExternalImageObject alloc] initWithURL:[NSString stringWithFormat:@"https://maps.googleapis.com/maps/api/staticmap?center=%f,%f&zoom=15&size=%@&sensor=true", _replyMessage.media.geo.lat,  _replyMessage.media.geo.n_long, ([NSScreen mainScreen].backingScaleFactor == 2 ? @"100x100" : @"50x50")]];
+        _replyThumb.imageSize = NSMakeSize(_containerHeight-2, _containerHeight-2);
+        _replyThumb.placeholder = gray_resizable_placeholder();
+
+    }
+    
+    if([_replyMessage.media isKindOfClass:[TL_messageMediaVideo class]]) {
+        
+        TLPhotoSize *photoSize = _replyMessage.media.video.thumb;
+        
+        NSImage *thumb;
+        if([photoSize isKindOfClass:[TL_photoCachedSize class]]) {
+            thumb = [[NSImage alloc] initWithData:photoSize.bytes];
+        }
+        
+        
+        
+        _replyThumb = [[TGImageObject alloc] initWithLocation:!thumb ? photoSize.location : nil placeHolder:thumb];
+        
+        
+        _replyThumb.imageSize = NSMakeSize(_containerHeight-2, _containerHeight-2);
+        
+    }
+    
+    if([_replyMessage.media isKindOfClass:[TL_messageMediaDocument class]] || [_replyMessage.media isKindOfClass:[TL_messageMediaDocument_old44 class]]) {
+        
+        if(![_replyMessage.media.document isSticker]) {
+            
+            if(_replyMessage.media.document.thumb && ![_replyMessage.media.document.thumb isKindOfClass:[TL_photoSizeEmpty class]]) {
+                
+                NSImage *thumb;
+                
+                if(_replyMessage.media.document.thumb.bytes) {
+                    thumb = [[NSImage alloc] initWithData:_replyMessage.media.document.thumb.bytes];
+                    thumb = cropCenterWithSize(thumb, NSMakeSize(_containerHeight-2, _containerHeight-2));
+                }
+                
+                _replyThumb = [[TGArticleImageObject alloc] initWithLocation:!thumb ? _replyMessage.media.document.thumb.location : nil placeHolder:thumb];
+                
+                _replyThumb.imageSize = NSMakeSize(_containerHeight-2, _containerHeight-2);
+                
+            }
+            
+        }
+    }
+
+     [replyCache setObject:self forKey:@(_replyMessage.channelMsgId)];
+  
+}
+
+
++(void)loadReplyMessage:(TL_localMessage *)fromMessage completionHandler:(void (^)(TL_localMessage *message))completionHandler {
+    
+    
+    [[Storage manager] messages:^(NSArray *result) {
+        
+        if(result.count == 1) {
+            [[Storage manager] addSupportMessages:result];
+            
+            if(completionHandler)
+                completionHandler(result[0]);
+            
+        } else if (![fromMessage isKindOfClass:[TL_destructMessage class]]) {
+            id request = [TLAPI_messages_getMessages createWithN_id:[@[@(fromMessage.reply_to_msg_id)] mutableCopy]];
+            
+            if([fromMessage.to_id isKindOfClass:[TL_peerChannel class]]) {
+                
+                
+                request = [TLAPI_channels_getMessages createWithChannel:[TL_inputChannel createWithChannel_id:fromMessage.chat.n_id access_hash:fromMessage.chat.access_hash] n_id:[@[@(fromMessage.reply_to_msg_id)] mutableCopy]];
+            }
+            
+            [RPCRequest sendRequest:request successHandler:^(id request, TL_messages_messages *response) {
+                
+                
+                if(response.messages.count == 1 ) {
+                    
+                    NSMutableArray *messages = [response.messages mutableCopy];
+                    [[response messages] removeAllObjects];
+                    
+                    
+                    [TL_localMessage convertReceivedMessages:messages];
+                    
+                    if([messages[0] isKindOfClass:[TL_messageEmpty class]]) {
+                        messages[0] = [TL_localEmptyMessage createWithN_Id:[(TL_messageEmpty *)messages[0] n_id] to_id:fromMessage.to_id];
+                    }
+                    
+                    [SharedManager proccessGlobalResponse:response];
+                    
+                    [[Storage manager] addSupportMessages:messages];
+                    
+                    [ASQueue dispatchOnMainQueue:^{
+                        if(completionHandler)
+                            completionHandler(messages[0]);
+                    }];
+                   
+                }
+                
+                
+            } errorHandler:^(id request, RpcError *error) {
+                
+                
+            } timeout:0 queue:[ASQueue globalQueue]._dispatch_queue];
+        }
+        
+    } forIds:@[@([fromMessage isKindOfClass:[TL_destructMessage class]] ? ((TL_destructMessage *)fromMessage).reply_to_random_id : ([fromMessage.to_id isKindOfClass:[TL_peerChannel class]] ? channelMsgId(fromMessage.reply_to_msg_id, fromMessage.peer_id) : fromMessage.reply_to_msg_id))] random:[fromMessage isKindOfClass:[TL_destructMessage class]] sync:NO queue:[ASQueue globalQueue] isChannel:[fromMessage.to_id isKindOfClass:[TL_peerChannel class]]];
+    
+}
+
+
+-(void)dealloc {
+    [_request cancelRequest];
+    _request = nil;
 }
 
 @end

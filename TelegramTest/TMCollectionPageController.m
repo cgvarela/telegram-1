@@ -13,13 +13,14 @@
 #import "TGPVMediaBehavior.h"
 #import "PhotoHistoryFilter.h"
 #import "VideoHistoryFilter.h"
+#import "PhotoVideoHistoryFilter.h"
 #import "DocumentHistoryFilter.h"
 #import "AudioHistoryFilter.h"
 #import "TGDocumentsMediaTableView.h"
 #import "DownloadVideoItem.h"
 #import "TGSharedMediaCap.h"
 #import "TGSharedLinksTableView.h"
-
+#import "TGAudioPlayerWindow.h"
 @interface TMCollectionPageController ()<TMTableViewDelegate>
 @property (nonatomic,strong) PhotoCollectionTableView *photoCollection;
 @property (nonatomic,strong) NSMutableArray *items;
@@ -54,7 +55,7 @@
 @end
 
 @interface TMCollectionPageView : TMView
-@property (nonatomic,strong) TMCollectionPageController *controller;
+@property (nonatomic,weak) TMCollectionPageController *controller;
 
 @end
 
@@ -85,20 +86,20 @@
 
 -(void)loadView {
     
-     weakify();
+     weak();
     
     [TGCache setMemoryLimit:100*1024*1024 group:PCCACHE];
     
-     self.view = [[TMCollectionPageView alloc] initWithFrame:self.frameInit];
+     self.view = [[TMCollectionPageView alloc] initWithFrame:NSZeroRect];
     
     
-    [self setTitle:NSLocalizedString(@"Conversation.Filter.Photos", nil)];
+    [self setTitle:NSLocalizedString(@"Profile.SharedMedia", nil)];
     
     [self.centerTextField setClickBlock:^{
         
-        TMMenuPopover *menuPopover = [[TMMenuPopover alloc] initWithMenu:[strongSelf filterMenu]];
+        TMMenuPopover *menuPopover = [[TMMenuPopover alloc] initWithMenu:[weakSelf filterMenu]];
         
-        [menuPopover showRelativeToRect:strongSelf.centerNavigationBarView.bounds ofView:strongSelf.centerNavigationBarView preferredEdge:CGRectMinYEdge];
+        [menuPopover showRelativeToRect:weakSelf.centerNavigationBarView.bounds ofView:weakSelf.centerNavigationBarView preferredEdge:CGRectMinYEdge];
         
     }];
     
@@ -106,10 +107,11 @@
     
     self.items = [[NSMutableArray alloc] init];
     
-    self.behavior = [[TGPVMediaBehavior alloc] init];
     
     _photoCollection = [[PhotoCollectionTableView alloc] initWithFrame:self.view.bounds];
-        
+    
+    _photoCollection.viewController = self;
+    
      [_photoCollection setFrame:self.view.bounds];
     
     _photoCollection.tm_delegate = self;
@@ -120,7 +122,7 @@
     
     [selectRightButton setTapBlock:^ {
         
-        strongSelf.isEditable = !strongSelf.isEditable;
+        [weakSelf setIsEditable:!weakSelf.isEditable animated:YES];
         
     }];
     
@@ -140,32 +142,29 @@
 
     
     self.documentsTableView = [[TGDocumentsMediaTableView alloc] initWithFrame:self.frameInit];
-    
+    self.documentsTableView.collectionViewController = self;
     
     [self.view addSubview:self.documentsTableView.containerView];
     
     [self.documentsTableView.containerView setHidden:YES];
+    
+    
+    self.sharedLinksTableView = [[TGSharedLinksTableView alloc] initWithFrame:self.frameInit];
+    self.sharedLinksTableView.collectionViewController = self;
+    
+    [self.view addSubview:self.sharedLinksTableView.containerView];
+    
+    [self.sharedLinksTableView.containerView setHidden:YES];
+    
+    
     
     self.mediaCap = [[TGSharedMediaCap alloc] initWithFrame:self.view.bounds cap:image_SadAttach() text:NSLocalizedString(@"SharedMedia.NoSharedMedia", nil)];
     
     
     [self.view addSubview:self.mediaCap];
     
-   // [self.mediaCap setHidden:YES];
-    
-    
     [self.view addSubview:self.actionsView];
     
-  //  [self.actionsView setHidden:YES];
-    
-    
-    
-    self.sharedLinksTableView = [[TGSharedLinksTableView alloc] initWithFrame:self.frameInit];
-    
-    
-    [self.view addSubview:self.sharedLinksTableView.containerView];
-    
-    [self.sharedLinksTableView.containerView setHidden:YES];
     
 }
 
@@ -178,7 +177,7 @@
 }
 
 
--(void)setIsEditable:(BOOL)isEditable {
+-(void)setIsEditable:(BOOL)isEditable animated:(BOOL)animated {
     _isEditable = isEditable;
     
      TMTextButton *btn = (TMTextButton *)self.rightNavigationBarView;
@@ -191,16 +190,20 @@
     
     self.selectedItems = [[NSMutableArray alloc] init];
     
-    [self.documentsTableView setEditable:isEditable animated:YES];
-    [self.sharedLinksTableView setEditable:isEditable animated:YES];
-    [self reloadData];
+    [self.documentsTableView setEditable:isEditable animated:animated];
+    [self.sharedLinksTableView setEditable:isEditable animated:animated];
+    [self.photoCollection reloadData];
+    
+    
     
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
         
+        [context setDuration:animated ? 0.2 : 0];
+        
         [[self.actionsView animator] setFrameOrigin:NSMakePoint(0, isEditable ? 0 : - NSHeight(self.actionsView.frame))];
-        [[self.photoCollection.containerView animator] setFrame:NSMakeRect(0, _isEditable ? NSHeight(self.actionsView.frame) : 0, NSWidth([Telegram rightViewController].view.frame), NSHeight([Telegram rightViewController].view.frame) - 48 - (_isEditable ? NSHeight(self.actionsView.frame) : 0))];
-        [[self.documentsTableView.containerView animator] setFrame:NSMakeRect(0, _isEditable ? NSHeight(self.actionsView.frame) : 0, NSWidth([Telegram rightViewController].view.frame), NSHeight([Telegram rightViewController].view.frame) - 48 - (_isEditable ? NSHeight(self.actionsView.frame) : 0))];
-        [[self.sharedLinksTableView.containerView animator] setFrame:NSMakeRect(0, _isEditable ? NSHeight(self.actionsView.frame) : 0, NSWidth([Telegram rightViewController].view.frame), NSHeight([Telegram rightViewController].view.frame) - 48 - (_isEditable ? NSHeight(self.actionsView.frame) : 0))];
+        [[self.photoCollection.containerView animator] setFrame:NSMakeRect(0, _isEditable ? NSHeight(self.actionsView.frame) : 0, NSWidth(self.navigationViewController.view.frame), NSHeight(self.navigationViewController.view.frame) - 48 - (_isEditable ? NSHeight(self.actionsView.frame) : 0))];
+        [[self.documentsTableView.containerView animator] setFrame:NSMakeRect(0, _isEditable ? NSHeight(self.actionsView.frame) : 0, NSWidth(self.navigationViewController.view.frame), NSHeight(self.navigationViewController.view.frame) - 48 - (_isEditable ? NSHeight(self.actionsView.frame) : 0))];
+        [[self.sharedLinksTableView.containerView animator] setFrame:NSMakeRect(0, _isEditable ? NSHeight(self.actionsView.frame) : 0, NSWidth(self.navigationViewController.view.frame), NSHeight(self.navigationViewController.view.frame) - 48 - (_isEditable ? NSHeight(self.actionsView.frame) : 0))];
         
     } completionHandler:^{
         
@@ -219,22 +222,24 @@
 -(void)didDeleteMessages:(NSNotification *)notification {
 
     
-    NSArray *ids = notification.userInfo[KEY_MESSAGE_ID_LIST];
+    NSArray *peer_update_data = notification.userInfo[KEY_DATA];
     
     NSMutableArray *items_to_delete = [[NSMutableArray alloc] init];
     
-    [ids enumerateObjectsUsingBlock:^(NSNumber *msg_id, NSUInteger idx, BOOL *stop) {
-            
-        [self.items enumerateObjectsUsingBlock:^(PhotoCollectionImageObject *obj, NSUInteger idx, BOOL *stop) {
+    [peer_update_data enumerateObjectsUsingBlock:^(NSDictionary *data, NSUInteger idx, BOOL *stop) {
+        
+        if(self.conversation.peer_id == [data[KEY_PEER_ID] intValue]) {
+            [self.items enumerateObjectsUsingBlock:^(PhotoCollectionImageObject *obj, NSUInteger idx, BOOL *stop) {
                 
-            if(obj.previewObject.msg_id == [msg_id intValue]) {
+                if(obj.previewObject.msg_id == [data[KEY_MESSAGE_ID] intValue]) {
                     
-                [items_to_delete addObject:obj];
+                    [items_to_delete addObject:obj];
                     
-                *stop = YES;
-            }
+                    *stop = YES;
+                }
                 
-        }];
+            }];
+        }
             
     }];
     
@@ -369,10 +374,9 @@ static const int maxWidth = 120;
     [self.photoCollection.containerView setHidden:YES];
     [self.sharedLinksTableView.containerView setHidden:YES];
     
-    [self.documentsTableView setConversation:self.conversation];
     [self setTitle:NSLocalizedString(@"Conversation.Filter.Files", nil)];
     [self checkCap];
-    [self setIsEditable:NO];
+    [self setIsEditable:NO animated:NO];
 }
 
 -(void)showSharedLinks {
@@ -380,11 +384,9 @@ static const int maxWidth = 120;
     [self.photoCollection.containerView setHidden:YES];
     [self.documentsTableView.containerView setHidden:YES];
     
-    
-    [self.sharedLinksTableView setConversation:self.conversation];
     [self setTitle:NSLocalizedString(@"Conversation.Filter.SharedLinks", nil)];
     [self checkCap];
-    [self setIsEditable:NO];
+    [self setIsEditable:NO animated:NO];
 }
 
 -(void)showAllMedia {
@@ -394,10 +396,14 @@ static const int maxWidth = 120;
     
     [self setTitle:NSLocalizedString(@"Profile.SharedMedia", nil)];
     [self checkCap];
-    [self setIsEditable:NO];
+    [self setIsEditable:NO animated:NO];
 }
 
+
+
 -(void)setConversation:(TL_conversation *)conversation {
+    
+    
     self->_conversation = conversation;
     
     self.isProgress = YES;
@@ -405,16 +411,16 @@ static const int maxWidth = 120;
     self.selectedItems = [[NSMutableArray alloc] init];
    
     
-    self.isEditable = NO;
     
-    [self setSectedMessagesCount:0];
+    
+    [self setSectedMessagesCount:0 enable:NO];
    
     [self view];
     
-    [self showAllMedia];
+   
     
     [self.documentsTableView setConversation:conversation];
-    
+    [self.sharedLinksTableView setConversation:conversation];
     
     [self.items removeAllObjects];
     
@@ -422,38 +428,42 @@ static const int maxWidth = 120;
     self.locked = NO;
     
     
-    self.behavior = [[TGPVMediaBehavior alloc] init];
-    self.behavior.conversation = conversation;
+    self.behavior = [[TGPVMediaBehavior alloc] initWithConversation:_conversation commonItem:nil filter:[PhotoVideoHistoryFilter class]];
     
-    
+    weak();
     
     [self.behavior load:INT32_MAX next:YES limit:100 callback:^(NSArray *previewObjects) {
         
-        [[ASQueue mainQueue] dispatchOnQueue:^{
-            
-            self.isProgress = NO;
-            
-            int limit = [self visibilityCount];
-            
-            self.waitItems = [[self convertItems:previewObjects] mutableCopy];
-            
-            if(self.waitItems.count > limit) {
+        strongWeak();
+        
+        if(strongSelf != nil) {
+            [ASQueue dispatchOnMainQueue:^{
                 
-                self.items = [[self.waitItems subarrayWithRange:NSMakeRange(0, limit)] mutableCopy];
+                strongSelf.isProgress = NO;
                 
-            } else {
-                self.items = [self.waitItems mutableCopy];
-            }
-            
-            
-            [self.waitItems removeObjectsInArray:self.items];
-            
-            [self reloadData];
-            
-            if(self.items.count < 50) {
-                [self loadRemote];
-            }
-        }];
+                int limit = [strongSelf visibilityCount];
+                
+                strongSelf.waitItems = [[strongSelf convertItems:previewObjects] mutableCopy];
+                
+                if(strongSelf.waitItems.count > limit) {
+                    
+                    strongSelf.items = [[strongSelf.waitItems subarrayWithRange:NSMakeRange(0, limit)] mutableCopy];
+                    
+                } else {
+                    strongSelf.items = [strongSelf.waitItems mutableCopy];
+                }
+                
+                
+                [strongSelf.waitItems removeObjectsInArray:strongSelf.items];
+                
+                [strongSelf reloadData];
+                
+                if(strongSelf.items.count < 50) {
+                    [strongSelf loadRemote];
+                }
+            }];
+        }
+        
     }];
     
 }
@@ -461,14 +471,26 @@ static const int maxWidth = 120;
 
 -(void)setSelected:(BOOL)selected forItem:(MessageTableItem *)item {
     
-    
     if(selected) {
         [_selectedItems addObject:item];
     } else {
         [_selectedItems removeObject:item];
     }
     
-    [self setSectedMessagesCount:self.selectedItems.count];
+    NSMutableArray *messages = [NSMutableArray array];
+    
+    [_selectedItems enumerateObjectsUsingBlock:^(MessageTableItem *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if([obj isKindOfClass:[MessageTableItem class]]) {
+            [messages addObject:obj.message];
+        } else {
+            PhotoCollectionImageObject *photo =  (PhotoCollectionImageObject *) obj;
+            
+            [messages addObject:photo.previewObject.media];
+        }
+        
+    }];
+    
+    [self setSectedMessagesCount:self.selectedItems.count enable:[MessagesViewController canDeleteMessages:messages inConversation:_conversation]];
 }
 
 -(BOOL)isSelectedItem:(PhotoCollectionImageObject *)item {
@@ -486,7 +508,7 @@ static const int maxWidth = 120;
     
     [string appendString:mediaString withColor:BLUE_UI_COLOR];
     
-    [string setFont:[NSFont fontWithName:@"HelveticaNeue" size:14] forRange:NSMakeRange(0, string.length)];
+    [string setFont:TGSystemFont(14) forRange:NSMakeRange(0, string.length)];
     
     [string appendAttributedString:[NSAttributedString attributedStringWithAttachment:[NSMutableAttributedString textAttachmentByImage:[image_HeaderDropdownArrow() imageWithInsets:NSEdgeInsetsMake(0, 5, 1, 4)]]]];
     
@@ -523,18 +545,31 @@ static const int maxWidth = 120;
     } else {
         self.locked = YES;
         
+        weak();
+        
         [self.behavior load:[[[self.items lastObject] previewObject] msg_id] next:YES limit:100 callback:^(NSArray *previewObjects) {
-            [[ASQueue mainQueue] dispatchOnQueue:^{
-                if(previewObjects.count > 0) {
+           
+            strongWeak();
+            
+            if(strongSelf != nil) {
+                [ASQueue dispatchOnMainQueue:^{
+                    if(previewObjects.count > 0) {
+                        
+                        NSArray *converted = [strongSelf convertItems:previewObjects];
+                        
+                        [strongSelf addNextItems:converted];
+                        
+                    }
                     
-                    NSArray *converted = [self convertItems:previewObjects];
+                    strongSelf.locked = NO;
                     
-                    [self addNextItems:converted];
+                    if(strongSelf.items.count < 20 && [strongSelf.behavior.controller filterWithNext:YES].nextState != ChatHistoryStateFull) {
+                        [strongSelf loadRemote];
+                    }
                     
-                }
-                
-                self.locked = NO;
-            }];
+                    
+                }];
+            }
             
         }];
     }
@@ -663,10 +698,15 @@ static const int maxWidth = 120;
 }
 
 -(void)checkCap {
-    if([self.photoCollection.containerView isHidden]) {
+    if(![self.documentsTableView.containerView isHidden]) {
         [self.mediaCap setHidden:![self.documentsTableView isNeedCap]];
         [self.mediaCap updateCap:image_NoFiles() text:NSLocalizedString(@"SharedMedia.NoFiles", nil)];
         [self.mediaCap setProgress:self.documentsTableView.isProgress];
+    } else if(![self.sharedLinksTableView.containerView isHidden]) {
+        [self.mediaCap setHidden:![self.sharedLinksTableView isNeedCap]];
+        [self.mediaCap updateCap:image_NoSharedLinks() text:NSLocalizedString(@"SharedMedia.NoSharedLinks", nil)];
+        [self.mediaCap setProgress:self.sharedLinksTableView.isProgress];
+        
     } else {
         [self.mediaCap setHidden:self.photoCollection.count != 0];
         [self.mediaCap updateCap:image_SadAttach() text:NSLocalizedString(@"SharedMedia.NoSharedMedia", nil)];
@@ -689,8 +729,6 @@ static const int maxWidth = 120;
         
         if(photo.sizes.count) {
             
-            //        NSImage *cachePhoto;
-            
             int idx = photo.sizes.count == 1 ? 0 : 1;
             
             TLPhotoSize* photoSize =  ((TLPhotoSize *)photo.sizes[idx]);
@@ -700,11 +738,12 @@ static const int maxWidth = 120;
             imageObject.previewObject = previewObject;
             
         }
-    } else if([media isKindOfClass:[TL_messageMediaVideo class]]) {
+    } else if([media isKindOfClass:[TL_messageMediaDocument class]]) {
         
-        TLVideo *video = media.video;
+        TLDocument *video = media.document;
         
-        imageObject = [[PhotoCollectionImageObject alloc] initWithLocation:[video.thumb isKindOfClass:[TL_photoCachedSize class]] ? nil : video.thumb.location placeHolder:[video.thumb isKindOfClass:[TL_photoCachedSize class]] ? [[NSImage alloc] initWithData:video.thumb.bytes] : nil sourceId:arc4random()];
+        imageObject = [[PhotoCollectionImageObject alloc] initWithLocation:video.thumb.location placeHolder:[video.thumb isKindOfClass:[TL_photoCachedSize class]] ? [[NSImage alloc] initWithData:video.thumb.bytes] : nil sourceId:arc4random()];
+        imageObject.imageProcessor = ![video.thumb.type isEqualToString:@"hd"] ? [ImageUtils b_processor] : [ImageUtils c_processor];
         imageObject.previewObject = previewObject;
         
         previewObject.reservedObject = [[DownloadVideoItem alloc] initWithObject:previewObject.media];
@@ -725,10 +764,6 @@ static const int maxWidth = 120;
         
     }]];
     
-//    [filterMenu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Conversation.Filter.Video",nil) withBlock:^(id sender) {
-//        [[Telegram rightViewController] showByDialog:self.conversation withJump:0 historyFilter:[VideoHistoryFilter class] sender:self];
-//    }]];
-//    
     
     [filterMenu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Conversation.Filter.Files",nil) withBlock:^(id sender) {
         [self showFiles];
@@ -738,9 +773,11 @@ static const int maxWidth = 120;
         [self showSharedLinks];
     }]];
     
-//    [filterMenu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Conversation.Filter.Audio",nil) withBlock:^(id sender) {
-//        [[Telegram rightViewController] showByDialog:self.conversation withJump:0 historyFilter:[AudioHistoryFilter class] sender:self];
-//    }]];
+    
+    [filterMenu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Modern.SharedMedia.Audio",nil) withBlock:^(id sender) {
+        [TGAudioPlayerWindow show:_conversation playerState:TGAudioPlayerGlobalStyleList navigation:self.navigationViewController];
+    }]];
+    
     
     return filterMenu;
 }
@@ -755,11 +792,30 @@ static const int maxWidth = 120;
     
     [self.photoCollection removeAllItems:NO];
     [self.photoCollection reloadData];
+    
+    
     [TGCache removeAllCachedImages:@[PCCACHE]];
+    
+    [self.documentsTableView setConversation:nil];
+    [self.sharedLinksTableView setConversation:nil];
+    
+    [_behavior drop];
+    _behavior = nil;
 }
+
+-(void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+
+}
+
 
 -(void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    
+    
+    [self setIsEditable:NO animated:NO];
+    
+    
     [Notification addObserver:self selector:@selector(didReceivedMedia:) name:MEDIA_RECEIVE];
     [Notification addObserver:self selector:@selector(didDeleteMessages:) name:MESSAGE_DELETE_EVENT];
 }
@@ -770,9 +826,9 @@ static const int maxWidth = 120;
     if(self->_actionsView)
         return self->_actionsView;
     
-    weakify();
+    weak();
     
-    self->_actionsView = [[TMView alloc] initWithFrame:NSMakeRect(0, 0, strongSelf.view.bounds.size.width, 58)];
+    self->_actionsView = [[TMView alloc] initWithFrame:NSMakeRect(0, 0, weakSelf.view.bounds.size.width, 58)];
     [self.actionsView setWantsLayer:YES];
     [self.actionsView setAutoresizesSubviews:YES];
     [self.actionsView setAutoresizingMask:NSViewWidthSizable];
@@ -786,33 +842,50 @@ static const int maxWidth = 120;
     [self.deleteButton setAutoresizingMask:NSViewMaxXMargin ];
     [self.deleteButton setTapBlock:^{
        
-        [[Telegram rightViewController].messagesViewController setState:MessagesViewControllerStateNone];
-        [[Telegram rightViewController].messagesViewController unSelectAll:NO];
+        [weakSelf.messagesViewController setState:MessagesViewControllerStateNone];
+        [weakSelf.messagesViewController unSelectAll:NO];
         
         
-        if(![strongSelf.documentsTableView.containerView isHidden]) {
+        if(![weakSelf.documentsTableView.containerView isHidden]) {
             
             
-            [strongSelf.documentsTableView.selectedItems enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+            [weakSelf.documentsTableView.selectedItems enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
                 
-                [[Telegram rightViewController].messagesViewController setSelectedMessage:obj selected:YES];
+                [weakSelf.messagesViewController setSelectedMessage:obj selected:YES];
             }];
             
             
+        } if(![weakSelf.sharedLinksTableView.containerView isHidden]) {
+            
+            [weakSelf.sharedLinksTableView.selectedItems enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+                
+                [weakSelf.navigationViewController.messagesViewController setSelectedMessage:obj selected:YES];
+            }];
         } else {
             
-            [strongSelf.selectedItems enumerateObjectsUsingBlock:^(PhotoCollectionImageObject *obj, NSUInteger idx, BOOL *stop) {
+            [weakSelf.selectedItems enumerateObjectsUsingBlock:^(PhotoCollectionImageObject *obj, NSUInteger idx, BOOL *stop) {
                 
                 MessageTableItem *item  = [MessageTableItem messageItemFromObject:obj.previewObject.media];
                 
-                [[Telegram rightViewController].messagesViewController setSelectedMessage:item selected:YES];
+                [weakSelf.navigationViewController.messagesViewController setSelectedMessage:item selected:YES];
             }];
             
         }
         
-       [[Telegram rightViewController].messagesViewController deleteSelectedMessages];
+        [weakSelf.navigationViewController.messagesViewController deleteSelectedMessages:^{
+            
+            NSMutableArray *array = [NSMutableArray array];
+            
+            [weakSelf.navigationViewController.messagesViewController.selectedMessages enumerateObjectsUsingBlock:^(MessageTableItem *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                [array addObject:@{KEY_PEER_ID:@(obj.message.peer_id),KEY_MESSAGE_ID:@(obj.message.n_id)}];
+            }];
+            
+            [Notification perform:MESSAGE_DELETE_EVENT data:@{KEY_DATA:array}];
+            
+            [weakSelf setIsEditable:NO animated:YES];
+        }];
         
-        strongSelf.isEditable = NO;
+        
         
     }];
     self.deleteButton.disableColor = NSColorFromRGB(0xa1a1a1);
@@ -821,7 +894,7 @@ static const int maxWidth = 120;
     
     self.messagesSelectedCount = [TMTextButton standartUserProfileNavigationButtonWithTitle:@""];
     self.messagesSelectedCount.textColor = DARK_BLACK;
-    self.messagesSelectedCount.font = [NSFont fontWithName:@"HelveticaNeue" size:14];
+    self.messagesSelectedCount.font = TGSystemFont(14);
     [self.messagesSelectedCount setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin];
     [self.actionsView addSubview:self.messagesSelectedCount];
     
@@ -833,38 +906,45 @@ static const int maxWidth = 120;
     [self.forwardButton setTapBlock:^{
         
         
-        [[Telegram rightViewController].messagesViewController setState:MessagesViewControllerStateNone];
-        [[Telegram rightViewController].messagesViewController unSelectAll:NO];
+        [weakSelf.messagesViewController setState:MessagesViewControllerStateNone];
+        [weakSelf.messagesViewController unSelectAll:NO];
         
         
         NSUInteger count = 0;
         
-        if(![strongSelf.documentsTableView.containerView isHidden]) {
+        if(![weakSelf.documentsTableView.containerView isHidden]) {
             
-            count = strongSelf.documentsTableView.selectedItems.count;
+            count = weakSelf.documentsTableView.selectedItems.count;
             
-            [strongSelf.documentsTableView.selectedItems enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+            [weakSelf.documentsTableView.selectedItems enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
                 
-                [[Telegram rightViewController].messagesViewController setSelectedMessage:obj selected:YES];
+                [weakSelf.messagesViewController setSelectedMessage:obj selected:YES];
             }];
             
             
+        } if(![weakSelf.sharedLinksTableView.containerView isHidden]) {
+            count = weakSelf.sharedLinksTableView.selectedItems.count;
+            
+            [weakSelf.sharedLinksTableView.selectedItems enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+                
+                [weakSelf.messagesViewController setSelectedMessage:obj selected:YES];
+            }];
         } else {
             
-            count = strongSelf.selectedItems.count;
+            count = weakSelf.selectedItems.count;
             
-            [strongSelf.selectedItems enumerateObjectsUsingBlock:^(PhotoCollectionImageObject *obj, NSUInteger idx, BOOL *stop) {
+            [weakSelf.selectedItems enumerateObjectsUsingBlock:^(PhotoCollectionImageObject *obj, NSUInteger idx, BOOL *stop) {
                 
                 MessageTableItem *item  = [MessageTableItem messageItemFromObject:obj.previewObject.media];
                 
-                [[Telegram rightViewController].messagesViewController setSelectedMessage:item selected:YES];
+                [weakSelf.messagesViewController setSelectedMessage:item selected:YES];
             }];
             
         }
         
-        [[Telegram rightViewController] showForwardMessagesModalView:strongSelf.conversation messagesCount:count];
+        [weakSelf.messagesViewController showForwardMessagesModalView];
         
-        strongSelf.isEditable = NO;
+        [weakSelf setIsEditable:NO animated:YES];
         
     }];
     
@@ -872,11 +952,11 @@ static const int maxWidth = 120;
         
         [GRAY_BORDER_COLOR set];
         
-        NSRectFill(NSMakeRect(0, NSHeight(strongSelf.actionsView.frame) - 1, NSWidth(strongSelf.actionsView.frame), 1));
+        NSRectFill(NSMakeRect(0, NSHeight(weakSelf.actionsView.frame) - 1, NSWidth(weakSelf.actionsView.frame), 1));
         
-        [strongSelf.forwardButton setFrameOrigin:NSMakePoint(strongSelf.actionsView.bounds.size.width - strongSelf.forwardButton.bounds.size.width - 22, roundf((strongSelf.actionsView.bounds.size.height - strongSelf.deleteButton.bounds.size.height) / 2))];
-        [strongSelf.deleteButton setFrameOrigin:NSMakePoint(30, roundf((strongSelf.actionsView.bounds.size.height - strongSelf.deleteButton.bounds.size.height) / 2) )];
-        [strongSelf.messagesSelectedCount setCenterByView:strongSelf.actionsView];
+        [weakSelf.forwardButton setFrameOrigin:NSMakePoint(weakSelf.actionsView.bounds.size.width - weakSelf.forwardButton.bounds.size.width - 22, roundf((weakSelf.actionsView.bounds.size.height - weakSelf.deleteButton.bounds.size.height) / 2))];
+        [weakSelf.deleteButton setFrameOrigin:NSMakePoint(30, roundf((weakSelf.actionsView.bounds.size.height - weakSelf.deleteButton.bounds.size.height) / 2) )];
+        [weakSelf.messagesSelectedCount setCenterByView:weakSelf.actionsView];
         
     }];
     
@@ -887,7 +967,7 @@ static const int maxWidth = 120;
     return self.actionsView;
 }
 
-- (void)setSectedMessagesCount:(NSUInteger)count {
+- (void)setSectedMessagesCount:(NSUInteger)count enable:(BOOL)enable {
     
     if(count == 0) {
         [self.messagesSelectedCount setHidden:YES];
@@ -895,8 +975,8 @@ static const int maxWidth = 120;
         [self.deleteButton setDisable:YES];
         return;
     } else {
-        [self.deleteButton setDisable:NO];
         [self.forwardButton setDisable:NO];
+        [self.deleteButton setDisable:!enable];
     }
     
     [self.messagesSelectedCount setHidden:NO];
@@ -905,6 +985,14 @@ static const int maxWidth = 120;
     [self.messagesSelectedCount sizeToFit];
     [self.messagesSelectedCount setFrameOrigin:NSMakePoint(roundf((self.actionsView.bounds.size.width - self.messagesSelectedCount.bounds.size.width) /2), roundf((self.actionsView.bounds.size.height - self.messagesSelectedCount.bounds.size.height)/2))];
     
+}
+
+
+
+-(void)dealloc {
+    [_documentsTableView clear];
+    [_photoCollection clear];
+    [_sharedLinksTableView clear];
 }
 
 

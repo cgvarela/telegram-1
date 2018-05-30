@@ -79,6 +79,7 @@
 
 - (void)textDidChange:(NSNotification *)notification {
     
+    
     if(_limit > 0 && self.string.length > _limit) {
         
         [self setString:[self.string substringWithRange:NSMakeRange(0, _limit)]];
@@ -89,9 +90,7 @@
     
     
     
-    [self detectAndAddLinks:URLFindTypeHashtags | URLFindTypeLinks | URLFindTypeMentions];
-    
-    self.font = [NSFont fontWithName:@"HelveticaNeue" size:[SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 13];
+    self.font = TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 13);
     
     
 //    NSUInteger numberOfLines, index, numberOfGlyphs = [self.layoutManager numberOfGlyphs];
@@ -122,7 +121,7 @@
     NSRect newRect = [self.layoutManager usedRectForTextContainer:self.textContainer];
     
     NSSize size = newRect.size;
-    size.width = self.containerView.bounds.size.width;
+    size.width = NSWidth(self.containerView.frame);
     
     
    // NSArray *
@@ -165,7 +164,7 @@
     BOOL isCleared = self.string.length == 0 && self.lastHeight > newSize.height && !self.disableAnimation;
     
     
-    NSSize layoutSize = NSMakeSize(newSize.width, newSize.height);
+    
     
     dispatch_block_t future = ^ {
         [self.scrollView setFrameSize:NSMakeSize(self.scrollView.bounds.size.width, newSize.height-2)];
@@ -182,7 +181,12 @@
     };
     
     [self.layoutManager ensureLayoutForTextContainer:self.textContainer];
-    [self.growingDelegate TMGrowingTextViewTextDidChange:notification != nil ? self : nil];
+    [self.growingDelegate TMGrowingTextViewTextDidChange:notification];
+    
+    newSize.width = NSWidth(self.containerView.frame);
+    
+    NSSize layoutSize = NSMakeSize(newSize.width, newSize.height);
+
     
     if(isCleared) {
       //  CAAnimation *anim = [TMAnimations resizeLayer:self.containerView.layer to:layoutSize];
@@ -208,11 +212,6 @@
         
     }
     
-    
-   
-    
-    
-    
     [self setNeedsDisplay:YES];
     
     [self setSelectedRange:NSMakeRange(self.selectedRange.location, self.selectedRange.length)];
@@ -221,6 +220,8 @@
     
    
 }
+
+
 
 - (void)initialize {
 
@@ -233,32 +234,30 @@
     self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     self.autoresizesSubviews = YES;
     self.delegate = self;
-    self.font = [NSFont fontWithName:@"HelveticaNeue" size:15];
+    self.font = TGSystemFont(15);
     self.insertionPointColor = NSColorFromRGB(0x0f92dd);
     
-    
-    
-  
-//    [self setBackgroundColor:[NSColor redColor]];
     [self setDrawsBackground:YES];
+    //TODO
+    __strong TMGrowingTextView *weakSelf = self;
     
-    weakify();
     self.containerView = [[TMView alloc] initWithFrame:self.bounds];
     [self.containerView setDrawBlock:^{
-        NSRect rect = NSMakeRect(1, 1, strongSelf.containerView.bounds.size.width - 2, strongSelf.containerView.bounds.size.height - 2);
-        NSBezierPath *circlePath = [NSBezierPath bezierPath];
-        [circlePath appendBezierPathWithRoundedRect:rect xRadius:3 yRadius:3];
-        [NSColorFromRGB(0xdedede) setStroke];
-        [circlePath setLineWidth:IS_RETINA ? 2 : 1];
-        [circlePath stroke];
-        [[NSColor whiteColor] setFill];
-        [circlePath fill];
         
-        [strongSelf.scrollView setFrame:NSMakeRect(2, 2, strongSelf.containerView.bounds.size.width - 4, strongSelf.containerView.bounds.size.height - 4)];
+        if(!weakSelf.disabledBorder) {
+            NSRect rect = NSMakeRect(1, 1, weakSelf.containerView.bounds.size.width - 2, weakSelf.containerView.bounds.size.height - 2);
+            NSBezierPath *circlePath = [NSBezierPath bezierPath];
+            [circlePath appendBezierPathWithRoundedRect:rect xRadius:3 yRadius:3];
+            [NSColorFromRGB(0xdedede) setStroke];
+            [circlePath setLineWidth:2];
+            [circlePath stroke];
+            [[NSColor whiteColor] setFill];
+            [circlePath fill];
+        }
+
+        [weakSelf.scrollView setFrame:NSMakeRect(2, 2, weakSelf.containerView.bounds.size.width - 4, weakSelf.containerView.bounds.size.height - 4)];
         
     }];
-    
-   // [self.containerView setBackgroundColor:NSColorFromRGB(0x000000)];
     
     self.containerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     
@@ -267,11 +266,29 @@
     self.scrollView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     self.scrollView.documentView = self;
     [self.scrollView setDrawsBackground:YES];
-//    [self.scrollView setBackgroundColor:[NSColor redColor]];
     [self.scrollView setFrame:NSMakeRect(9, 0, self.bounds.size.width - 9, self.bounds.size.height - 2)];
     [self.containerView addSubview:self.scrollView];
     
 }
+
+
+
+
+
+-(void)changeLayoutOrientation:(id)sender {
+   
+}
+
+
+-(BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+    if(menuItem.action == @selector(changeLayoutOrientation:)) {
+        return NO;
+    }
+    
+    
+    return [super validateMenuItem:menuItem];
+}
+
 
 - (void)setContinuousSpellCheckingEnabled:(BOOL)flag
 {
@@ -283,11 +300,10 @@
     return  [[NSUserDefaults standardUserDefaults] boolForKey:[NSString stringWithFormat:@"ContinuousSpellCheckingEnabled%@",NSStringFromClass([self class])]];
 }
 
-
 -(void)setGrammarCheckingEnabled:(BOOL)flag {
     
     [[NSUserDefaults standardUserDefaults] setBool: flag forKey:[NSString stringWithFormat:@"GrammarCheckingEnabled%@",NSStringFromClass([self class])]];
-    [super setContinuousSpellCheckingEnabled: flag];
+    [super setGrammarCheckingEnabled: flag];
 }
 
 -(BOOL)isGrammarCheckingEnabled {
@@ -350,7 +366,7 @@
 }
 
 - (void)setPlaceholderString:(NSString *)placeHodlder {
-    self.placeholderTextAttributedString = [[NSAttributedString alloc] initWithString:placeHodlder attributes:@{NSForegroundColorAttributeName: NSColorFromRGB(0xc8c8c8), NSFontAttributeName: [NSFont fontWithName:@"HelveticaNeue" size:[SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 13]}];
+    self.placeholderTextAttributedString = [[NSAttributedString alloc] initWithString:placeHodlder attributes:@{NSForegroundColorAttributeName: NSColorFromRGB(0xc8c8c8), NSFontAttributeName: TGSystemFont([SettingsArchiver checkMaskedSetting:BigFontSetting] ? 15 : 13)}];
 }
 
 
@@ -361,10 +377,10 @@
     
     [super drawRect:dirtyRect];
     
-    if ([[self string] isEqualToString:@""] ) {
+    if (self.string.length == 0) {
         if(self.placeholderTextAttributedString) {
             
-           [self.placeholderTextAttributedString drawAtPoint:NSMakePoint(6, 4)];
+            [self.placeholderTextAttributedString drawAtPoint:NSMakePoint(6, NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? 6 : 4)];
         }
     }
 }
@@ -413,6 +429,11 @@
             [self insertNewline:self];
         }
         return;
+    }   else if(theEvent.keyCode == 53 && [self.growingDelegate respondsToSelector:@selector(TMGrowingTextViewNeedClose:)]) {
+        [self.growingDelegate TMGrowingTextViewNeedClose:self];
+        
+        return;
+        
     }
     
     
@@ -425,10 +446,6 @@
     }
 }
 
-
--(BOOL)validateMenuItem:(NSMenuItem *)menuItem {
-    return [super validateMenuItem:menuItem];
-}
 
 
 

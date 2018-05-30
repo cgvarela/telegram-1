@@ -11,11 +11,11 @@
 @implementation TLPeer (Extensions)
 
 - (int)peer_id {
-    return  self.chat_id != 0 ? ([self isSecret] || ([self isBroadcast]) ? self.chat_id : -self.chat_id) : self.user_id;
+    return  self.chat_id != 0 ? ([self isSecret] || ([self isBroadcast]) ? self.chat_id : -self.chat_id) : (self.channel_id != 0 ? -self.channel_id : self.user_id);
 }
 
 - (BOOL)isChat {
-    return self.chat_id != 0;
+    return self.chat_id != 0 || self.channel_id != 0;
 }
 
 - (BOOL)isSecret {
@@ -27,20 +27,59 @@
     return [self isKindOfClass:[TL_peerBroadcast class]];
 }
 
-
++(TLPeer *)peerWithClassName:(NSString *)className peer_id:(int)peer_id {
+    
+    Class c = NSClassFromString(className);
+    
+    TLPeer *peer = [[c alloc] init];
+    
+    if([peer isKindOfClass:[TL_peerChannel class]])
+        peer.channel_id = abs(peer_id);
+    else if([peer isKindOfClass:[TL_peerChat class]] || [peer isKindOfClass:[TL_peerSecret class]])
+        peer.chat_id = abs(peer_id);
+    else
+        peer.user_id = abs(peer_id);
+    
+    return peer;
+        
+    
+}
 
 -(TLPeer *)peerOut {
-    if(self.chat_id == 0)
+    if(self.chat_id == 0 && self.channel_id == 0)
         return [TL_peerUser createWithUser_id:self.user_id];
     else
         if([self isSecret] || [self isBroadcast]) return self;
     
-    return [TL_peerChat createWithChat_id:self.chat_id];
+    
+    if(self.chat_id != 0)
+        return [TL_peerChat createWithChat_id:self.chat_id];
+    else if(self.channel_id != 0)
+        return [TL_peerChannel createWithChannel_id:self.channel_id];
+    
+    
+    return nil;
 }
 
-+(TLPeer *)peerForId:(int)peer_id {
-    if(peer_id < 0)
-        return [TL_peerChat createWithChat_id:-peer_id];
-    return [TL_peerUser createWithUser_id:peer_id];
-};
+-(TLInputPeer *)inputPeer {
+    if(self.chat_id == 0 && self.channel_id == 0)
+        return [TL_inputPeerUser createWithUser_id:self.user_id access_hash:[[[UsersManager sharedManager] find:self.user_id] access_hash]];
+    else if(![self isBroadcast]) {
+        
+        TLChat *chat = [[ChatsManager sharedManager] find:self.chat_id == 0 ? self.channel_id : self.chat_id];
+        
+        if([self isKindOfClass:[TL_peerChannel class]]) {
+            return [TL_inputPeerChannel createWithChannel_id:self.channel_id access_hash:chat.access_hash];
+        } else if([self isKindOfClass:[TL_peerChat class]]) {
+            return [TL_inputPeerChat createWithChat_id:self.chat_id];
+        }
+    }
+    
+    
+    return nil;
+}
+
+
+
+
 @end

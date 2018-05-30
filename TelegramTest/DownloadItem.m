@@ -9,7 +9,6 @@
 #import "DownloadItem.h"
 #import "DownloadQueue.h"
 #import "DownloadOperation.h"
-
 @interface DownloadItem ()
 @property (nonatomic,strong) NSMutableArray *events;
 @end
@@ -44,8 +43,26 @@ static int futureUniqueKey = 0;
         _uniqueKey = ++futureUniqueKey;
         _downloadState = DownloadStateWaitingStart;
         self.events = [[NSMutableArray alloc] init];
+        
     }
     return self;
+}
+
+-(void)setN_id:(long)n_id {
+    _n_id = n_id;
+    
+    [self findAndFillAfterInit];
+}
+
+-(void)findAndFillAfterInit {
+    
+//    DownloadItem *item = [DownloadQueue find:self.n_id];
+//    
+//    if(item) {
+//        _downloadState = item.downloadState;
+//        _progress = item.progress;
+//        [self start];
+//    }
 }
 
 -(id)initWithObject:(id)object size:(int)size {
@@ -64,14 +81,19 @@ static int futureUniqueKey = 0;
     
 }
 
+-(BOOL)isNeedRequestAgain {
+    return NO;
+}
+
 -(void)dealloc {
-    [self removeAllEvents];
+    
 }
 
 
 -(void)start {
     self.downloadState = DownloadStateDownloading;
     [DownloadQueue addAndStartItem:self];
+    
 }
 
 -(void)cancel {
@@ -106,9 +128,17 @@ static int futureUniqueKey = 0;
     [self notify:DownloadItemHandlerTypeProgress];
 }
 
+-(ASQueue *)deliveryQueue {
+    if(_deliveryQueue != nil)
+        return _deliveryQueue;
+    
+    return [DownloadQueue dispatcher];
+}
+
+
 
 -(void)notify:(DownloadItemHandlerType)type {
-    [DownloadQueue dispatchOnStageQueue:^{
+    [self.deliveryQueue dispatchOnQueue:^{
         
         [self.events enumerateObjectsUsingBlock:^(DownloadEventListener *obj, NSUInteger idx, BOOL *stop) {
             
@@ -135,14 +165,14 @@ static int futureUniqueKey = 0;
 
 
 -(void)addEvent:(DownloadEventListener *)event {
-    [DownloadQueue dispatchOnStageQueue:^{
+    [self.deliveryQueue dispatchOnQueue:^{
         if([self.events indexOfObject:event] == NSNotFound)
             [self.events addObject:event];
     }];
    
 }
 -(void)removeEvent:(DownloadEventListener *)event {
-    [DownloadQueue dispatchOnStageQueue:^{
+    [self.deliveryQueue dispatchOnQueue:^{
         [self.events removeObject:event];
     }];
     
@@ -160,12 +190,17 @@ static int futureUniqueKey = 0;
     return self.size == 0 ? 0 : (self.size < PART_32MB_SIZE ? PART_32KB_SIZE : PART_128KB_SIZE);
 }
 
+-(BOOL)instantlySave {
+    return YES;
+}
+-(BOOL)checkSize {
+    return YES;
+}
 
 -(void)removeAllEvents {
-    [DownloadQueue dispatchOnStageQueue:^{   
+    [self.deliveryQueue dispatchOnQueue:^{
         [self.events removeAllObjects];
-    } synchronous:YES];
-    
+    }];
 }
 
 

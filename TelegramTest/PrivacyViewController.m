@@ -16,7 +16,7 @@
 @property (nonatomic,strong) GeneralSettingsRowItem *lastSeenRowItem;
 @property (nonatomic,strong) GeneralSettingsRowItem *blockedUsersRowIten;
 @property (nonatomic,strong) GeneralSettingsRowItem *accountDaysItem;
-
+@property (nonatomic,strong) GeneralSettingsRowItem *groupsSettingsItem;
 @property (nonatomic,assign) int accountDaysTTL;
 
 
@@ -37,14 +37,12 @@
     [self.view addSubview:self.tableView.containerView];
     
     
-    GeneralSettingsBlockHeaderItem *privacyHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"PrivacyAndSecurity.PrivacyHeader", nil)];
-    
-    privacyHeader.height = 61;
+    GeneralSettingsBlockHeaderItem *privacyHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"PrivacyAndSecurity.PrivacyHeader", nil) height:51 flipped:NO];
     
     [self.tableView insert:privacyHeader atIndex:self.tableView.list.count tableRedraw:NO];
     
     
-    self.blockedUsersRowIten = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+    self.blockedUsersRowIten = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
         
         [[Telegram rightViewController] showBlockedUsers];
         
@@ -53,7 +51,7 @@
     [self.tableView insert:self.blockedUsersRowIten atIndex:self.tableView.list.count tableRedraw:NO];
     
     
-    self.lastSeenRowItem = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+    self.lastSeenRowItem = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
         
         if(!self.lastSeenRowItem.locked)
             [[Telegram rightViewController] showLastSeenController];
@@ -62,20 +60,27 @@
     
     [self.tableView insert:self.lastSeenRowItem atIndex:self.tableView.list.count tableRedraw:NO];
     
+    
+    self.groupsSettingsItem = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
+        
+        if(!self.groupsSettingsItem.locked)
+            [[Telegram rightViewController] showChatInviteController];
+        
+    } description:NSLocalizedString(@"PrivacyAndSecurity.Groups", nil) subdesc:@"" height:42 stateback:nil];
+    
+    [self.tableView insert:self.groupsSettingsItem atIndex:self.tableView.list.count tableRedraw:NO];
 
     
-    GeneralSettingsBlockHeaderItem *security = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"PrivacyAndSecurity.SecurityHeader", nil)];
-    
-    security.height = 51;
+    GeneralSettingsBlockHeaderItem *security = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"PrivacyAndSecurity.SecurityHeader", nil) height:51 flipped:NO];
     
     [self.tableView insert:security atIndex:self.tableView.list.count tableRedraw:NO];
     
     
-    GeneralSettingsRowItem *passcode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+    GeneralSettingsRowItem *passcode = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
         
         [[Telegram rightViewController] showPasscodeController];
         
-    } description:NSLocalizedString(@"PrivacyAndSecurity.PassCode", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+    } description:NSLocalizedString(@"PrivacyAndSecurity.PassCode", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
         return @(YES);
     }];
     
@@ -94,23 +99,23 @@
     
     if(accept) {
         
-        GeneralSettingsRowItem *terminateSessions = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+        GeneralSettingsRowItem *terminateSessions = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
             
             [[Telegram rightViewController] showSessionsController];
             
             //  [self terminateSessions];
             
-        } description:NSLocalizedString(@"PrivacyAndSecurity.TerminateSessions", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+        } description:NSLocalizedString(@"PrivacyAndSecurity.TerminateSessions", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
             return @(YES);
         }];
         
         [self.tableView insert:terminateSessions atIndex:self.tableView.list.count tableRedraw:NO];
         
-        GeneralSettingsRowItem *twoStepVerification = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+        GeneralSettingsRowItem *twoStepVerification = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
             
             [[Telegram rightViewController] showPasswordMainController];
             
-        } description:NSLocalizedString(@"PrivacyAndSecurity.TwoStepVerification", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+        } description:NSLocalizedString(@"PrivacyAndSecurity.TwoStepVerification", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
             return @(YES);
         }];
         
@@ -121,58 +126,56 @@
     
     
 //    
-//    GeneralSettingsRowItem *logout = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+//    GeneralSettingsRowItem *logout = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
 //        N
 //        [self logOut];
 //        
 //        
-//    } description:NSLocalizedString(@"PrivacyAndSecurity.Logout", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+//    } description:NSLocalizedString(@"PrivacyAndSecurity.Logout", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
 //        return @([SettingsArchiver checkMaskedSetting:AutoGroupAudio]);
 //    }];
 //    
 //    [self.tableView insert:logout atIndex:self.tableView.list.count tableRedraw:NO];
     
     
-    GeneralSettingsBlockHeaderItem *deleteAccountHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"PrivacyAndSecurity.DeleteAccountHeader", nil)];
-    
-    deleteAccountHeader.height = 51;
+    GeneralSettingsBlockHeaderItem *deleteAccountHeader = [[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"PrivacyAndSecurity.DeleteAccountHeader", nil) height:51 flipped:NO];
     
     [self.tableView insert:deleteAccountHeader atIndex:self.tableView.list.count tableRedraw:NO];
     
     
-    self.accountDaysItem = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+    self.accountDaysItem = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeChoice callback:^(TGGeneralRowItem *item) {
         
-       /// [self logOut];
         
-        GeneralSettingsRowView *view = [self.tableView viewAtColumn:0 row:[self.tableView indexOfItem:self.accountDaysItem] makeIfNecessary:NO];
+    } description:NSLocalizedString(@"PrivacyAndSecurity.DeleteAccount", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
+        NSString *key = [NSString stringWithFormat:@"AccountDaysTTL%d",self.accountDaysTTL];
         
-        if(view) {
-            NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
-            
-            [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL30",nil) withBlock:^(id sender) {
-                
-                [self sendAccountDaysTTL:30];
-                
-            }]];
-            
-            [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL90",nil) withBlock:^(id sender) {
-                [self sendAccountDaysTTL:90];
-            }]];
-            
-            [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL182",nil) withBlock:^(id sender) {
-                [self sendAccountDaysTTL:182];
-            }]];
-            
-            [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL365",nil) withBlock:^(id sender) {
-                [self sendAccountDaysTTL:365];
-            }]];
-            
-            [menu popUpForView:view.subdescField];
-        }
-        
-    } description:NSLocalizedString(@"PrivacyAndSecurity.DeleteAccount", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
-        return @([SettingsArchiver checkMaskedSetting:AutoGroupAudio]);
+        return NSLocalizedString(key, nil);
     }];
+    
+    
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+    
+    [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL30",nil) withBlock:^(id sender) {
+        
+        [self sendAccountDaysTTL:30];
+        
+    }]];
+    
+    [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL90",nil) withBlock:^(id sender) {
+        [self sendAccountDaysTTL:90];
+    }]];
+    
+    [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL182",nil) withBlock:^(id sender) {
+        [self sendAccountDaysTTL:182];
+    }]];
+    
+    [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"AccountDaysTTL365",nil) withBlock:^(id sender) {
+        [self sendAccountDaysTTL:365];
+    }]];
+
+    
+    self.accountDaysItem.menu = menu;
+
     
     [self.tableView insert:self.accountDaysItem atIndex:self.tableView.list.count tableRedraw:NO];
     
@@ -190,9 +193,9 @@
 //    [self.tableView insert:deleteAccountHeader atIndex:self.tableView.list.count tableRedraw:NO];
 //    
 //    
-//    GeneralSettingsRowItem *deleteAccount = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(GeneralSettingsRowItem *item) {
+//    GeneralSettingsRowItem *deleteAccount = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
 //        
-//    } description:NSLocalizedString(@"PrivacyAndSecurity.DeleteAccount", nil) height:42 stateback:^id(GeneralSettingsRowItem *item) {
+//    } description:NSLocalizedString(@"PrivacyAndSecurity.DeleteAccount", nil) height:42 stateback:^id(TGGeneralRowItem *item) {
 //        return @([SettingsArchiver checkMaskedSetting:EmojiReplaces]);
 //    }];
 //    
@@ -246,10 +249,7 @@
 
 -(void)updateAccountDaysTTL {
     
-    NSString *key = [NSString stringWithFormat:@"AccountDaysTTL%d",self.accountDaysTTL];
-    
-    self.accountDaysItem.subdesc = NSLocalizedString(key, nil);
-    
+
     [self.tableView reloadData];
 }
 
@@ -287,41 +287,49 @@
     
     
     PrivacyArchiver *lsPrivacy = [PrivacyArchiver privacyForType:kStatusTimestamp];
+    PrivacyArchiver *gPrivacy = [PrivacyArchiver privacyForType:kStatusGroups];
     
     
-    NSString * subdesc = @"";
-    
-    NSString *adc = @"";
-    
-    if(lsPrivacy.disallowUsers.count > 0) {
-        adc = [adc stringByAppendingFormat:@" (-%lu",lsPrivacy.disallowUsers.count];
-    }
-    
-    if(lsPrivacy.allowUsers.count > 0) {
-        adc = [adc stringByAppendingFormat:@"%@+%lu",adc.length > 0 ? @", " : @" (", lsPrivacy.allowUsers.count];
-    }
-    
-    if(adc.length > 0)
-        adc = [adc stringByAppendingString:@")"];
-    
-    switch (lsPrivacy.allowType) {
-        case PrivacyAllowTypeContacts:
-            
-            subdesc = [NSString stringWithFormat:@"%@%@",NSLocalizedString(@"PrivacySettingsController.MyContacts", nil),adc];
-            break;
-        case PrivacyAllowTypeEverbody:
-            subdesc = [NSString stringWithFormat:@"%@%@",NSLocalizedString(@"PrivacySettingsController.Everbody", nil),adc];
-            break;
-        case PrivacyAllowTypeNobody:
-            subdesc = [NSString stringWithFormat:@"%@%@",NSLocalizedString(@"PrivacySettingsController.Nobody", nil),adc];
-            break;
-            
-        default:
-            break;
-    }
-    
-    self.lastSeenRowItem.subdesc = subdesc;
+    void (^block)(PrivacyArchiver *privacy, GeneralSettingsRowItem *item) = ^(PrivacyArchiver *privacy, GeneralSettingsRowItem *item) {
+        NSString * subdesc = @"";
+        
+        NSString *adc = @"";
+        
+        if(privacy.disallowUsers.count > 0) {
+            adc = [adc stringByAppendingFormat:@" (-%lu",privacy.disallowUsers.count];
+        }
+        
+        if(privacy.allowUsers.count > 0) {
+            adc = [adc stringByAppendingFormat:@"%@+%lu",adc.length > 0 ? @", " : @" (", privacy.allowUsers.count];
+        }
+        
+        if(adc.length > 0)
+            adc = [adc stringByAppendingString:@")"];
+        
+        switch (privacy.allowType) {
+            case PrivacyAllowTypeContacts:
+                
+                subdesc = [NSString stringWithFormat:@"%@%@",NSLocalizedString(@"PrivacySettingsController.MyContacts", nil),adc];
+                break;
+            case PrivacyAllowTypeEverbody:
+                subdesc = [NSString stringWithFormat:@"%@%@",NSLocalizedString(@"PrivacySettingsController.Everbody", nil),adc];
+                break;
+            case PrivacyAllowTypeNobody:
+                subdesc = [NSString stringWithFormat:@"%@%@",NSLocalizedString(@"PrivacySettingsController.Nobody", nil),adc];
+                break;
+                
+            default:
+                break;
+        }
+        
+        [item setSubdescString:subdesc];
 
+    };
+    
+    block(lsPrivacy,self.lastSeenRowItem);
+    block(gPrivacy,self.groupsSettingsItem);
+    
+   
     [self.tableView reloadData];
     
 }
@@ -334,30 +342,36 @@
     
     [Notification addObserver:self selector:@selector(updatePrivacyDescription:) name:PRIVACY_UPDATE];
     
-    
-    
-    if([PrivacyArchiver privacyForType:kStatusTimestamp] == nil && !self.lastSeenRowItem.locked) {
+    void (^block)(NSString *privacyKey,GeneralSettingsRowItem *item, id request) = ^(NSString *privacyKey,GeneralSettingsRowItem *item, id request) {
         
-        [self.lastSeenRowItem setLocked:YES];
-        
-        [self.tableView reloadData];
-        
-        [RPCRequest sendRequest:[TLAPI_account_getPrivacy createWithN_key:[TL_inputPrivacyKeyStatusTimestamp create]] successHandler:^(RPCRequest *request, TL_account_privacyRules *response) {
+        if([PrivacyArchiver privacyForType:privacyKey] == nil && !item.locked) {
             
-            [SharedManager proccessGlobalResponse:response];
+            [item setLocked:YES];
             
-            PrivacyArchiver *privacy = [PrivacyArchiver privacyFromRules:[response rules] forKey:kStatusTimestamp];
-            
-            [privacy _save];
-            
-            [self.lastSeenRowItem setLocked:NO];
             [self.tableView reloadData];
             
-        } errorHandler:^(RPCRequest *request, RpcError *error) {
+            [RPCRequest sendRequest:request successHandler:^(RPCRequest *request, TL_account_privacyRules *response) {
+                
+                [SharedManager proccessGlobalResponse:response];
+                
+                PrivacyArchiver *privacy = [PrivacyArchiver privacyFromRules:[response rules] forKey:privacyKey];
+                
+                [privacy _save];
+                
+                [item setLocked:NO];
+                [self.tableView reloadData];
+                
+            } errorHandler:^(RPCRequest *request, RpcError *error) {
+                
+            }];
             
-        }];
-        
-    }
+        }
+
+    };
+    
+    block(kStatusTimestamp,self.lastSeenRowItem,[TLAPI_account_getPrivacy createWithN_key:[TL_inputPrivacyKeyStatusTimestamp create]]);
+    block(kStatusGroups,self.groupsSettingsItem,[TLAPI_account_getPrivacy createWithN_key:[TL_inputPrivacyKeyChatInvite create]]);
+    
 }
 
 -(void)viewWillDisappear:(BOOL)animated {

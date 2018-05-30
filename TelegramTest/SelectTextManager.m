@@ -7,16 +7,24 @@
 //
 
 #import "SelectTextManager.h"
-
-
+#import "MessageTableItem.h"
+#import "MessagesTableView.h"
 @interface SelectTextManager ()
 @property (nonatomic,strong) NSMutableDictionary *keys;
 @property (nonatomic,strong) NSMutableArray *list;
 @property (nonatomic,strong) NSMutableArray *delegates;
+
+@property (nonatomic,strong) MessagesTableView *tableView;
 @end
 
 @implementation SelectTextManager
 
++(MessagesTableView *)currentTableView {
+    return [(SelectTextManager *)[self instance] tableView];
+}
++(void)setCurrentTableView:(MessagesTableView *)currentTableView {
+    [(SelectTextManager *)[self instance] setTableView:currentTableView];
+}
 
 +(void)addSelectManagerDelegate:(id<SelectTextManagerDelegate>)delegate {
     [[[self instance] delegates] addObject:delegate];
@@ -27,17 +35,18 @@
 }
 
 +(void)addRange:(NSRange)range forItem:(id<SelectTextDelegate>)item {
-            
-    [[[self instance] list] removeObject:item];
     
-    [[[self instance] keys] removeObjectForKey:[item identifier]];
-    
-    if(range.location != NSNotFound) {
-        [[[self instance] list] addObject:item];
+    if(item != nil) {
+        [[[self instance] list] removeObject:item];
         
-        [[self instance] keys][[item identifier]] = [NSValue valueWithRange:range];
+        [[[self instance] keys] removeObjectForKey:[item identifier]];
+        
+        if(range.location != NSNotFound) {
+            [[[self instance] list] addObject:item];
+            
+            [[self instance] keys][[item identifier]] = [NSValue valueWithRange:range];
+        }
     }
-    
     
 }
 
@@ -60,6 +69,7 @@
     [[[self instance] delegates] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
          [obj clearSelection];
     }];
+    [self setCurrentTableView:nil];
 }
 
 +(NSRange)rangeForItem:(id<SelectTextDelegate>)item {
@@ -93,13 +103,57 @@
     
     __block NSString *result = @"";
     
+    __block int sliceCount = 1;
+    
+    __block BOOL needSelectMessages = [[self instance] list].count > 1;
+    
+    
     [self enumerateItems:^(id obj, NSRange range) {
+        
+        if(needSelectMessages)
+            needSelectMessages = [obj isKindOfClass:[MessageTableItem class]];
+        
         result = [result stringByAppendingFormat:@"%@\n",[[obj string] substringWithRange:range]];
     }];
     
-    result = [result substringToIndex:result.length -1];
+    if(needSelectMessages)
+        return [self selectMessagesText];
+    
+    result = [result substringToIndex:result.length - sliceCount];
     
     return result;
+}
+
++(NSString *)selectMessagesText {
+    
+    __block NSString *result = @"";
+    
+    __block MessageTableItem *lastItem;
+    
+    __block int lastUserId = 0;
+    __block BOOL header = YES;
+    
+    [self enumerateItems:^(MessageTableItem *item, NSRange range) {
+        
+        if(!lastItem)
+            lastItem = item;
+        
+        header = item.user.n_id != lastUserId || item.isHeaderMessage;
+        
+        if(header)
+            result = [result stringByAppendingFormat:@"%@, [%@]: \n",item.user.fullName,item.fullDate];
+        
+        lastUserId = item.user.n_id;
+        
+        
+        result = [result stringByAppendingFormat:@"%@%@%@\n\n",range.location != 0 ? @"..." : @"", [[item string] substringWithRange:range],range.location + range.length != item.string.length ? @"..." : @""];
+    }];
+    
+    result = [result substringToIndex:result.length - 2];
+    
+    
+    return result;
+
 }
 
 
@@ -142,8 +196,8 @@
     
 }
 
-+(id)instance {
-    static const SelectTextManager *manager;
++(SelectTextManager *)instance {
+    static SelectTextManager *manager;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         manager = [[SelectTextManager alloc] init];

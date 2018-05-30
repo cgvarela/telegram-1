@@ -107,24 +107,59 @@ NSArray *imageTypes() {
 }
 
 NSString *fileMD5(NSString * path) {
-    NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
-    if( handle == nil)
-        return [@"ERROR GETTING FILE MD5" md5]; // file didnt exist
-    
-    NSUInteger size = fileSize(path);
-    
-    NSUInteger seek = size - MIN(4096,size);
-    
-    NSData *fileData = [[NSData alloc] initWithData:[handle readDataOfLength:MIN(size, 4096)]];
-    
-    [handle seekToFileOffset:seek];
-    
-    fileData = [fileData dataWithData:[handle readDataToEndOfFile]];
-    
-    
-    NSString *md5 = [[[NSString alloc] initWithData:fileData encoding:NSUTF8StringEncoding] md5];
-    return [[NSString stringWithFormat:@"MD5_%@_%lu", md5, (unsigned long)size] md5];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    // Make sure the file exists
+    if( [fileManager fileExistsAtPath:path isDirectory:nil] )
+    {
+        NSData *data = [NSData dataWithContentsOfFile:path];
+        unsigned char digest[CC_MD5_DIGEST_LENGTH];
+        CC_MD5( data.bytes, (CC_LONG)data.length, digest );
+        
+        NSMutableString *output = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH * 2];
+        
+        for( int i = 0; i < CC_MD5_DIGEST_LENGTH; i++ )
+        {
+            [output appendFormat:@"%02x", digest[i]];
+        }
+        
+        return output;
+    }
+    else
+    {
+        return @"";
+    }
 }
+
+
+//+(NSString*)fileMD5:(NSString*)path
+//{
+//    NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
+//    if( handle== nil ) return @";ERROR GETTING FILE MD5"; // file didnt exist
+//    
+//    CC_MD5_CTX md5;
+//    
+//    CC_MD5_Init(&md5);
+//    
+//    BOOL done = NO;
+//    while(!done)
+//    {
+//        NSData* fileData = [handle readDataOfLength: CHUNK_SIZE ];
+//        CC_MD5_Update(&md5, [fileData bytes], [fileData length]);
+//        if( [fileData length] == 0 ) done = YES;
+//    }
+//    unsigned char digest[CC_MD5_DIGEST_LENGTH];
+//    CC_MD5_Final(digest, &md5);
+//    NSString* s = [NSString stringWithFormat: @";%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+//                   digest[0], digest[1],
+//                   digest[2], digest[3],
+//                   digest[4], digest[5],
+//                   digest[6], digest[7],
+//                   digest[8], digest[9],
+//                   digest[10], digest[11],
+//                   digest[12], digest[13],
+//                   digest[14], digest[15]];
+//    return s;
+//}
 
 static NSMutableDictionary *extensions;
 static NSMutableDictionary *mimeTypes;
@@ -151,7 +186,7 @@ static NSMutableDictionary *mimeTypes;
             [ex setObject:[single objectAtIndex:0] forKey:[single objectAtIndex:1]];
         }
         
-       extensions = ex;
+        extensions = ex;
         
         mimeTypes = types;
     });
@@ -162,7 +197,7 @@ NSString *mimetypefromExtension(NSString *extension) {
     
     [CFunctions initialize];
     
-    NSString *mimeType = [mimeTypes objectForKey:extension];
+    NSString *mimeType = [mimeTypes objectForKey:extension.lowercaseString];
     if(!mimeType)
         mimeType = [mimeTypes objectForKey:@"*"];
     return mimeType;
@@ -173,6 +208,80 @@ NSString* extensionForMimetype(NSString *mimetype) {
      [CFunctions initialize];
     
      return extensions[mimetype];
+}
+
+NSArray<NSString *> *cut_messages(NSString *message, int max_length) {
+    
+    NSMutableArray *parts = [NSMutableArray array];
+    
+    int inc = max_length;
+    
+    @try {
+        for (int i = 0; i < message.length; i += inc)
+        {
+            int length = MIN(max_length, (int)message.length - i);
+            
+            NSString *substring = [message substringWithRange:NSMakeRange(i, length)];
+            
+            NSUInteger (^giveup)(NSCharacterSet *symbol) = ^NSUInteger(NSCharacterSet *symbol) {
+                
+                NSUInteger index = NSNotFound;
+                
+                for (int j = (int)substring.length ; j > 0; j --) {
+                    
+                     if([[substring substringWithRange:NSMakeRange(j-1, 1)] rangeOfCharacterFromSet:symbol].location != NSNotFound) {
+                        index = j;
+                        break;
+                    }
+                }
+                
+                return index;
+            };
+            
+            NSArray<NSCharacterSet *> *csets = @[[NSCharacterSet newlineCharacterSet],[NSCharacterSet characterSetWithCharactersInString:@"."],[NSCharacterSet whitespaceCharacterSet]];
+            
+            NSUInteger index = substring.length;
+            
+            if(index + inc != message.length) {
+            
+                for (NSCharacterSet *set in csets) {
+                    NSUInteger idx = giveup(set);
+                    if(idx != NSNotFound) {
+                        index = idx;
+                        break;
+                    }
+                }
+                
+            }
+            
+            substring = [substring substringWithRange:NSMakeRange(0, index)];
+            
+            inc = (int) substring.length;
+            
+            if (substring.length != 0) {
+                [parts addObject:substring];
+            }
+            
+        }
+    } @catch (NSException *exception) {
+        
+        [parts removeAllObjects];
+        
+        for (NSUInteger i = 0; i < message.length; i += max_length)
+        {
+            NSString *substring = [message substringWithRange:NSMakeRange(i, MIN(max_length, message.length - i))];
+            if (substring.length != 0) {
+                
+                [parts addObject:substring];
+                
+            }
+            
+        }
+        
+        return parts;
+    }
+   
+    return parts;
 }
 
 

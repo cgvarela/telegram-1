@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>${EXECUTABLE_NAME}</string>
 	<key>CFBundleIdentifier</key>
-	<string>ru.keepcoder.Telegram</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -15,7 +15,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.71</string>
+	<string>2.30</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -31,13 +31,20 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>23808</string>
+	<string>51477</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.social-networking</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>${MACOSX_DEPLOYMENT_TARGET}</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2015 TELEGRAM MESSENGER LLP. All rights reserved.</string>
+	<key>NSLocationUsageDescription</key>
+	<string></string>
 	<key>NSMainNibFile</key>
 	<string>NewMainMenu</string>
 	<key>NSPrincipalClass</key>
@@ -47,8 +54,8 @@
 		<string>org.telegram.conversation</string>
 	</array>
 	<key>SUFeedURL</key>
-	<string>https://rink.hockeyapp.net/api/2/apps/c55f5e74ae5d0ad254df29f71a1b5f0e</string>
+	<string>${SFEED_URL}</string>
 	<key>SUPublicDSAKeyFile</key>
-	<string>dsa_pub.pem</string>
+	<string>${DSA_PEM_FILE}</string>
 </dict>
 </plist>

@@ -11,7 +11,8 @@
 #import "SecretLayer17.h"
 #import "SecretLayer20.h"
 #import "SecretLayer23.h"
-#import <MtProtoKit/MTEncryption.h>
+#import "SecretLayer45.h"
+#import <MtProtoKitMac/MTEncryption.h>
 #import "Crypto.h"
 #import "SenderHeader.h"
 #import "MessagesUtils.h"
@@ -21,6 +22,7 @@
 #import "AbortKeySecretSenderItem.h"
 #import "ResendSecretSenderItem.h"
 #import "Crypto.h"
+#import "TL_destructMessage45.h"
 @implementation TGModernEncryptedUpdates
 
 
@@ -116,9 +118,14 @@
             [params discard];
         }
         
-        void (*func)(id, SEL, id, EncryptedParams *, TL_conversation *, TL_encryptedMessage *) = (void *)imp;
-        func(self, proccessMethod,des,params,chat.dialog, update);
-         
+        @try {
+            void (*func)(id, SEL, id, EncryptedParams *, TL_conversation *, TL_encryptedMessage *) = (void *)imp;
+            func(self, proccessMethod,des,params,chat.dialog, update);
+        } @catch (NSException *exception) {
+            
+        }
+        
+
     }
     
 }
@@ -171,34 +178,7 @@
             
             NSArray *random_ids = [action valueForKey:@"random_ids"];
             
-            [[Storage manager] deleteMessagesWithRandomIds:random_ids completeHandler:^(BOOL result) {
-                
-                NSMutableDictionary *update = [[NSMutableDictionary alloc] init];
-                
-                NSMutableArray *ids = [[NSMutableArray alloc] init];
-                
-                
-                for (NSNumber *msgId in random_ids) {
-                    
-                    TL_destructMessage *message = [[MessagesManager sharedManager] findWithRandomId:[msgId longValue]];
-                    
-                    if(message) {
-                        [ids addObject:@(message.n_id)];
-                    }
-                    
-                    if(message && message.conversation) {
-                        [update setObject:message.conversation forKey:@(message.conversation.peer.peer_id)];
-                    }
-                    
-                }
-                
-                for (TL_conversation *dialog in update.allValues) {
-                    [[DialogsManager sharedManager] updateLastMessageForDialog:dialog];
-                }
-                
-                [Notification perform:MESSAGE_DELETE_EVENT data:@{KEY_MESSAGE_ID_LIST:ids}];
-                
-            }];
+            [[DialogsManager sharedManager] deleteMessagesWithRandomMessageIds:random_ids isChannelMessages:NO];
             
             return YES;
         }
@@ -220,30 +200,14 @@
             
             NSArray *items = [action valueForKey:@"random_ids"];
             
-            NSMutableArray *storageMessages = [[NSMutableArray alloc] init];
-            
-            [items enumerateObjectsUsingBlock:^(NSNumber *obj, NSUInteger idx, BOOL *stop) {
-                
-                
-                
-               TL_destructMessage *msg = (TL_destructMessage *) [[MessagesManager sharedManager] findWithRandomId:[obj longValue]];
-                if(msg) {
-                    [SelfDestructionController addMessage:msg force:YES];
-                } else {
-                    [storageMessages addObject:obj];
-                }
-                
-            }];
             
             [[Storage manager] messages:^(NSArray *result) {
-                
-                [[MessagesManager sharedManager] add:result];
                 
                 [result enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
                     [SelfDestructionController addMessage:obj force:YES];
                 }];
                 
-            } forIds:storageMessages random:YES sync:YES queue:_queue ? _queue : [ASQueue globalQueue]];
+            } forIds:items random:YES sync:NO queue:_queue ? _queue : [ASQueue globalQueue]];
             
             return YES;
         }
@@ -499,6 +463,32 @@ Class convertClass(NSString *c, int layer) {
 }
 
 
+-(void)proccess45Layer:(Secret45_DecryptedMessage *)message params:(EncryptedParams *)params conversation:(TL_conversation *)conversation  encryptedMessage:(TL_encryptedMessage *)encryptedMessage  {
+    
+    Secret45_DecryptedMessageLayer *layerMessage = (Secret45_DecryptedMessageLayer *)message;
+    
+    if([layerMessage.out_seq_no intValue] != 0 && [layerMessage.out_seq_no intValue] < params.in_seq_no * 2 + [params in_x] )
+        return;
+    
+    
+    id media = [TL_messageMediaEmpty create];
+    
+    
+    
+    if([layerMessage.message isKindOfClass:[Secret45_DecryptedMessage_decryptedMessage class]]) {
+        media = [self media:[layerMessage.message valueForKey:@"media"] layer:45 file:encryptedMessage.file];
+    }
+    
+    TGSecretInAction *action = [[TGSecretInAction alloc] initWithActionId:arc4random() chat_id:params.n_id messageData:[Secret45__Environment serializeObject:layerMessage.message]  fileData:[TLClassStore serialize:media] date:encryptedMessage.date in_seq_no:[layerMessage.out_seq_no intValue] layer:45];
+    
+    
+    [[Storage manager] insertSecretInAction:action];
+    
+    [self dequeueInActions:params conversation:conversation];
+    
+}
+
+
 -(void)dequeueInActions:(EncryptedParams *)params conversation:(TL_conversation *)conversation {
     
     [[Storage manager] selectSecretInActions:params.n_id completeHandler:^(NSArray *list) {
@@ -515,8 +505,13 @@ Class convertClass(NSString *c, int layer) {
                     
                     
                     id messageObject = [NSClassFromString([NSString stringWithFormat:@"Secret%d__Environment",action.layer]) parseObject:action.messageData];
-                    
-                    id media = [TLClassStore deserialize:action.fileData];
+                    id media;
+                    @try {
+                        media = [TLClassStore deserialize:action.fileData];
+                    }
+                    @catch (NSException *exception) {
+                        
+                    }
                     
                     BOOL isProccessed = [self proccessServiceMessage:messageObject withLayer:action.layer params:params conversation:conversation];
                     
@@ -524,7 +519,18 @@ Class convertClass(NSString *c, int layer) {
                     if(!isProccessed && [messageObject isKindOfClass:NSClassFromString([NSString stringWithFormat:@"Secret%d_DecryptedMessage_decryptedMessage",action.layer])]) {
                         
                         
-                        TL_destructMessage *localMessage = [TL_destructMessage createWithN_id:[MessageSender getFutureMessageId] flags:TGUNREADMESSAGE from_id:[conversation.encryptedChat peerUser].n_id to_id:[TL_peerSecret createWithChat_id:params.n_id] date:action.date message:[messageObject valueForKey:@"message"] media:media destruction_time:0 randomId:[[messageObject valueForKey:@"random_id"] longValue] fakeId:[MessageSender getFakeMessageId] ttl_seconds:[[messageObject valueForKey:@"ttl"] intValue] out_seq_no:-1 dstate:DeliveryStateNormal];
+                        TL_destructMessage *localMessage;
+                        
+                        
+                        if(action.layer >= 45) {
+                            Secret45_DecryptedMessage_decryptedMessage *message = (Secret45_DecryptedMessage_decryptedMessage *)messageObject;
+                            
+                            localMessage = [TL_destructMessage45 createWithN_id:[MessageSender getFutureMessageId] flags:[message.flags intValue] from_id:[conversation.encryptedChat peerUser].n_id to_id:[TL_peerSecret createWithChat_id:params.n_id] date:action.date message:[messageObject valueForKey:@"message"] media:media destruction_time:0 randomId:[[messageObject valueForKey:@"random_id"] longValue] fakeId:[MessageSender getFakeMessageId] ttl_seconds:[[messageObject valueForKey:@"ttl"] intValue] entities:[self convertEntities:message.entities layer:45] via_bot_name:message.via_bot_name reply_to_random_id:[message.reply_to_random_id longValue] out_seq_no:-1 dstate:DeliveryStateNormal];
+                            
+                        } else {
+                            localMessage = [TL_destructMessage createWithN_id:[MessageSender getFutureMessageId] flags: TGUNREADMESSAGE from_id:[conversation.encryptedChat peerUser].n_id to_id:[TL_peerSecret createWithChat_id:params.n_id] date:action.date message:[messageObject valueForKey:@"message"] media:media destruction_time:0 randomId:[[messageObject valueForKey:@"random_id"] longValue] fakeId:[MessageSender getFakeMessageId] ttl_seconds:[[messageObject valueForKey:@"ttl"] intValue] out_seq_no:-1 dstate:DeliveryStateNormal];
+                        }
+                        
                         
                         [MessagesManager addAndUpdateMessage:localMessage];
                         
@@ -575,7 +581,23 @@ Class convertClass(NSString *c, int layer) {
         if([obj isKindOfClass:imageSizeAttr]) {
             [attrs addObject:[TL_documentAttributeImageSize createWithW:[[obj valueForKey:@"w"] intValue] h:[[obj valueForKey:@"h"] intValue]]];
         } else if([obj isKindOfClass:stickerAttr]) {
-            [attrs addObject:[TL_documentAttributeSticker createWithAlt:@"" stickerset:[TL_inputStickerSetEmpty create]]];
+            
+            if(layer < 45)
+                [attrs addObject:[TL_documentAttributeSticker createWithFlags:0 alt:@"" stickerset:[TL_inputStickerSetEmpty create] mask_coords:nil]];
+            else {
+                
+                Secret45_DocumentAttribute_documentAttributeSticker *attr = obj;
+                
+                TLInputStickerSet *stickerset = [TL_inputStickerSetEmpty create];
+                
+                if([attr.stickerset isKindOfClass:[Secret45_InputStickerSet_inputStickerSetShortName class]]) {
+                    stickerset = [TL_inputStickerSetShortName createWithShort_name:((Secret45_InputStickerSet_inputStickerSetShortName *)attr.stickerset).short_name];
+                }
+                
+                [attrs addObject:[TL_documentAttributeSticker createWithFlags:0 alt:attr.alt stickerset:stickerset mask_coords:nil]];
+            }
+            
+            
         } else if([obj isKindOfClass:filenameAttr]) {
             [attrs addObject:[TL_documentAttributeFilename createWithFile_name:[obj valueForKey:@"file_name"]]];
         } else if([obj isKindOfClass:videoAttr]) {
@@ -589,6 +611,51 @@ Class convertClass(NSString *c, int layer) {
     }];
     
     return attrs;
+}
+
+-(NSMutableArray *)convertEntities:(NSArray *)list layer:(int)layer {
+    NSMutableArray *entities = [[NSMutableArray alloc] init];
+    
+    
+    [list enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+        
+        Class messageEntityUnknown = convertClass(@"Secret%d_MessageEntity_messageEntityUnknown", layer);
+        Class messageEntityMention = convertClass(@"Secret%d_MessageEntity_messageEntityMention", layer);
+        Class messageEntityHashtag = convertClass(@"Secret%d_MessageEntity_messageEntityHashtag", layer);
+        Class messageEntityBotCommand = convertClass(@"Secret%d_MessageEntity_messageEntityBotCommand", layer);
+        Class messageEntityEmail = convertClass(@"Secret%d_MessageEntity_messageEntityEmail", layer);
+        Class messageEntityBold = convertClass(@"Secret%d_MessageEntity_messageEntityBold", layer);
+        Class messageEntityItalic = convertClass(@"Secret%d_MessageEntity_messageEntityItalic", layer);
+        Class messageEntityCode = convertClass(@"Secret%d_MessageEntity_messageEntityCode", layer);
+        Class messageEntityPre = convertClass(@"Secret%d_MessageEntity_messageEntityPre", layer);
+        Class messageEntityTextUrl = convertClass(@"Secret%d_MessageEntity_messageEntityTextUrl", layer);
+        
+        
+        if([obj isKindOfClass:messageEntityUnknown]) {
+            [entities addObject:[TL_messageEntityUnknown createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityMention]) {
+            [entities addObject:[TL_messageEntityMention createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityHashtag]) {
+            [entities addObject:[TL_messageEntityHashtag createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityBotCommand]) {
+            [entities addObject:[TL_messageEntityBotCommand createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityEmail]) {
+            [entities addObject:[TL_messageEntityEmail createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityBold]) {
+            [entities addObject:[TL_messageEntityBold createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityItalic]) {
+            [entities addObject:[TL_messageEntityItalic createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityCode]) {
+            [entities addObject:[TL_messageEntityCode createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue]]];
+        } else if([obj isKindOfClass:messageEntityPre]) {
+            [entities addObject:[TL_messageEntityPre createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue] language:[obj valueForKey:@"language"]]];
+        } else if([obj isKindOfClass:messageEntityTextUrl]) {
+            [entities addObject:[TL_messageEntityTextUrl createWithOffset:[[obj valueForKey:@"offset"] intValue] length:[[obj valueForKey:@"length"] intValue] url:[obj valueForKey:@"url"]]];
+        }
+        
+    }];
+    
+    return entities;
 }
 
 -(TLMessageMedia *)media:(id)media layer:(int)layer file:(TLEncryptedFile *)file {
@@ -625,8 +692,14 @@ Class convertClass(NSString *c, int layer) {
         
         NSMutableArray *attrs = [self convertDocumentAttributes:[media valueForKey:@"attributes"] layer:layer];
         
-        return [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:[[media valueForKey:@"pid"] longValue] access_hash:[[media valueForKey:@"access_hash"] longValue] date:[[media valueForKey:@"date"] intValue] mime_type:[media valueForKey:@"mime_type"] size:[[media valueForKey:@"size"] intValue] thumb:pthumb dc_id:[[media valueForKey:@"dc_id"] intValue] attributes:attrs]];
+        return [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:[[media valueForKey:@"pid"] longValue] access_hash:[[media valueForKey:@"access_hash"] longValue] date:[[media valueForKey:@"date"] intValue] mime_type:[media valueForKey:@"mime_type"] size:[[media valueForKey:@"size"] intValue] thumb:pthumb dc_id:[[media valueForKey:@"dc_id"] intValue]  version:0 attributes:attrs] caption:@""];
         
+    } else if([media isKindOfClass:convertClass(@"Secret%d_DecryptedMessageMedia_decryptedMessageMediaVenue", layer)]) {
+        
+        id m = [TL_messageMediaVenue createWithGeo:[TL_geoPoint createWithN_long:[[media valueForKey:@"plong"] doubleValue] lat:[[media valueForKey:@"lat"] doubleValue]] title:[media valueForKey:@"title"]  address:[media valueForKey:@"address"] provider:[media valueForKey:@"provider"] venue_id:[media valueForKey:@"venue_id"]];
+        return m;
+    } else if([media isKindOfClass:convertClass(@"Secret%d_DecryptedMessageMedia_decryptedMessageMediaVenue", layer)]) {
+        return [TL_messageMediaWebPage createWithWebpage:[TL_secretWebpage createWithUrl:[media valueForKey:@"url"] date:[[MTNetwork instance] getTime]+5]];
     }
     
     
@@ -655,7 +728,7 @@ Class convertClass(NSString *c, int layer) {
         
         NSMutableArray *size =  [NSMutableArray arrayWithObjects:s0,s1,nil];
         
-        return [TL_messageMediaPhoto createWithPhoto:[TL_photo createWithN_id:[file n_id] access_hash:[file access_hash] user_id:0 date:[[MTNetwork instance] getTime] geo:[TL_geoPointEmpty create] sizes:size] caption:@""];
+        return [TL_messageMediaPhoto createWithPhoto:[TL_photo createWithFlags:0 n_id:[file n_id] access_hash:[file access_hash] date:[[MTNetwork instance] getTime] sizes:size] caption:@""];
         
     } else if([media isKindOfClass:convertClass(@"Secret%d_DecryptedMessageMedia_decryptedMessageMediaDocument", layer)]) {
         
@@ -664,24 +737,39 @@ Class convertClass(NSString *c, int layer) {
          if( ((NSData *)[media valueForKey:@"thumb"]).length > 0) {
             size = [TL_photoCachedSize createWithType:@"x" location:[TL_fileLocation createWithDc_id:0 volume_id:0 local_id:0 secret:0] w:[[media valueForKey:@"thumb_w"] intValue] h:[[media valueForKey:@"thumb_h"] intValue] bytes:[media valueForKey:@"thumb"]];
          }
-            
-        return [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:file.n_id access_hash:file.access_hash date:[[MTNetwork instance] getTime] mime_type:[media valueForKey:@"mime_type"] size:file.size thumb:size dc_id:[file dc_id] attributes:[@[[TL_documentAttributeFilename createWithFile_name:[media valueForKey:@"file_name"]]] mutableCopy]]];
+        
+        NSMutableArray *attributes;
+        
+        if(layer < 45) {
+            attributes = [@[[TL_documentAttributeFilename createWithFile_name:[media valueForKey:@"file_name"]]] mutableCopy];
+        } else {
+            attributes = [self convertDocumentAttributes:[(Secret45_DecryptedMessageMedia_decryptedMessageMediaDocument *)media attributes] layer:45];
+        }
+        
+        return [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:file.n_id access_hash:file.access_hash date:[[MTNetwork instance] getTime] mime_type:[media valueForKey:@"mime_type"] size:file.size thumb:size dc_id:[file dc_id] version:0 attributes:attributes] caption:@""];
        
            
     } else if([media isKindOfClass:convertClass(@"Secret%d_DecryptedMessageMedia_decryptedMessageMediaVideo", layer)]) {
         
         NSString *mime_type = [media respondsToSelector:@selector(mime_type)] ? [media valueForKey:@"mime_type"] : @"mp4";
         
-        return [TL_messageMediaVideo createWithVideo:[TL_video createWithN_id:file.n_id access_hash:file.access_hash user_id:0 date:[[MTNetwork instance] getTime] duration:[[media valueForKey:@"duration"] intValue] size:file.size thumb:[TL_photoCachedSize createWithType:@"jpeg" location:location w:[[media valueForKey:@"thumb_w"] intValue] h:[[media valueForKey:@"thumb_h"] intValue] bytes:[media valueForKey:@"thumb"]] dc_id:[file dc_id] w:[[media valueForKey:@"w"] intValue] h:[[media valueForKey:@"h"] intValue]] caption:@""];
+        NSMutableArray *attrs = [NSMutableArray array];
+        
+        [attrs addObject:[TL_documentAttributeVideo createWithDuration:[[media valueForKey:@"duration"] intValue] w:[[media valueForKey:@"w"] intValue] h:[[media valueForKey:@"h"] intValue]]];
+        
+        return [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:file.n_id access_hash:file.access_hash date:[[MTNetwork instance] getTime] mime_type:mime_type size:file.size thumb:[TL_photoCachedSize createWithType:@"jpeg" location:location w:[[media valueForKey:@"thumb_w"] intValue] h:[[media valueForKey:@"thumb_h"] intValue] bytes:[media valueForKey:@"thumb"]] dc_id:file.dc_id version:0 attributes:attrs] caption:@""];
+
         
     } else if([media isKindOfClass:convertClass(@"Secret%d_DecryptedMessageMedia_decryptedMessageMediaAudio", layer)]) {
         
-        NSString *mime_type = [media respondsToSelector:@selector(mime_type)] ? [media valueForKey:@"mime_type"] : @"ogg";
+        NSString *mime_type = [media respondsToSelector:@selector(mime_type)] ? [media valueForKey:@"mime_type"] : @"audio/ogg";
         
-        return [TL_messageMediaAudio createWithAudio:[TL_audio createWithN_id:file.n_id access_hash:file.access_hash user_id:0 date:[[MTNetwork instance] getTime] duration:[[media valueForKey:@"duration"] intValue] mime_type:mime_type size:file.size dc_id:file.dc_id]];
+        NSMutableArray *attrs = [NSMutableArray array];
         
-    } else {
-        alert(@"Unknown secret media", @"");
+        [attrs addObject:[TL_documentAttributeAudio createWithFlags:(1 << 10) duration:[[media valueForKey:@"duration"] intValue] title:nil performer:nil waveform:nil]];
+        
+        return [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:file.n_id access_hash:file.access_hash date:[[MTNetwork instance] getTime] mime_type:mime_type size:file.size thumb:[TL_photoSizeEmpty createWithType:@"x"] dc_id:file.dc_id version:0 attributes:attrs] caption:@""];
+        
     }
     
     return [TL_messageMediaEmpty create];

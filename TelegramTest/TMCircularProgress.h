@@ -18,7 +18,7 @@ typedef enum {
     float min;// default = 0;
     float max;// default = 100;
     BOOL reversed;// default = no;
-    float duration;
+    @public float duration;
     float fps;
 }
 
@@ -31,6 +31,8 @@ typedef enum {
 @property (nonatomic,strong) NSColor *progressColor;
 @property (nonatomic,assign) float currentProgress;
 @property (nonatomic,strong) NSColor *backgroundColor;
+
+@property (nonatomic,assign) BOOL disableRotating;
 
 -(void)setProgress:(float)progress animated:(BOOL)animated;
 

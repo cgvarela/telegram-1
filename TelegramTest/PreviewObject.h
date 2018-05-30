@@ -13,10 +13,15 @@
 @property (nonatomic, assign, readonly) long msg_id;
 @property (nonatomic, assign, readonly) int peerId;
 
+
+@property (nonatomic,assign) int date;
+
 @property (nonatomic,assign) long access_hash;
 
 @property (nonatomic,strong) id reservedObject;
+@property (nonatomic,strong) id reservedObject1;
 
+@property (nonatomic,weak) id reservedObject2;
 
 -(id)initWithMsdId:(long)msg_id media:(id)media peer_id:(int)peer_id;
 @end

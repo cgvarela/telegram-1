@@ -51,9 +51,9 @@
     PhotoCollectionImageObject *obj = (PhotoCollectionImageObject *) self.object;
     
     
-    if([[Telegram rightViewController].collectionViewController isEditable]) {
+    if([_controller isEditable]) {
         
-        [[Telegram rightViewController].collectionViewController setSelected:![[Telegram rightViewController].collectionViewController isSelectedItem:obj] forItem:obj];
+        [_controller setSelected:![_controller isSelectedItem:obj] forItem:obj];
         
         [self setObject:obj];
         
@@ -63,8 +63,8 @@
     if([[(TL_localMessage *)obj.previewObject.media media] isKindOfClass:[TL_messageMediaPhoto class]]) {
         obj.previewObject.reservedObject = imageFromFile(locationFilePath(self.object.location, @"jpg"));
         
-        [[TGPhotoViewer viewer] show:obj.previewObject conversation:[Telegram rightViewController].collectionViewController.conversation];
-    } else if([[(TL_localMessage *)obj.previewObject.media media] isKindOfClass:[TL_messageMediaVideo class]]) {
+        [[TGPhotoViewer viewer] show:obj.previewObject conversation:self.controller.conversation];
+    } else if([[(TL_localMessage *)obj.previewObject.media media] isKindOfClass:[TL_messageMediaDocument class]]) {
         [self checkAction];
     }
     
@@ -75,7 +75,7 @@ static NSImage *playVideoImage() {
     static NSImage *image = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSRect rect = NSMakeRect(0, 0, 48, 48);
+        NSRect rect = NSMakeRect(0, 0, 40, 40);
         image = [[NSImage alloc] initWithSize:rect.size];
         [image lockFocus];
         [NSColorFromRGBWithAlpha(0x000000, 0.5) set];
@@ -83,7 +83,7 @@ static NSImage *playVideoImage() {
         [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:rect.size.width/2 yRadius:rect.size.height/2];
         [path fill];
         
-        [image_PlayIconWhite() drawInRect:NSMakeRect(roundf((48 - image_PlayIconWhite().size.width)/2) + 2, roundf((48 - image_PlayIconWhite().size.height)/2) , image_PlayIconWhite().size.width, image_PlayIconWhite().size.height) fromRect:NSZeroRect operation:NSCompositeHighlight fraction:1];
+        [image_PlayIconWhite() drawInRect:NSMakeRect(roundf((40 - image_PlayIconWhite().size.width)/2) + 2, roundf((40 - image_PlayIconWhite().size.height)/2) , image_PlayIconWhite().size.width, image_PlayIconWhite().size.height) fromRect:NSZeroRect operation:NSCompositeHighlight fraction:1];
         [image unlockFocus];
     });
     return image;//image_VideoPlay();
@@ -92,7 +92,7 @@ static NSImage *playVideoImage() {
 -(instancetype)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
         
-        self.loaderView = [[TMLoaderView alloc] initWithFrame:NSMakeRect(0, 0, 50, 50)];
+        self.loaderView = [[TMLoaderView alloc] initWithFrame:NSMakeRect(0, 0, 40, 40)];
         
         [self.loaderView setStyle:TMCircularProgressDarkStyle];
         
@@ -101,6 +101,8 @@ static NSImage *playVideoImage() {
         [self.loaderView setImage:image_DownloadIconWhite() forState:TMLoaderViewStateNeedDownload];
         [self.loaderView setImage:image_LoadCancelWhiteIcon() forState:TMLoaderViewStateDownloading];
         [self.loaderView setImage:image_LoadCancelWhiteIcon() forState:TMLoaderViewStateUploading];
+        
+        [self.loaderView setHidden:YES animated:NO];
         
         [self addSubview:self.loaderView];
         
@@ -142,20 +144,38 @@ static NSImage *playVideoImage() {
     TL_localMessage *msg = object.previewObject.media;
     
     
-    [self.selectButton setHidden:![[Telegram rightViewController].collectionViewController isEditable]];
+    [self.selectButton setHidden:![_controller isEditable]];
     
-    [self.selectButton setSelected:[[Telegram rightViewController].collectionViewController isSelectedItem:object]];
+    [self.selectButton setSelected:[_controller isSelectedItem:object]];
     
     [self.loaderView setHidden:YES];
     [self.playImage setHidden:YES];
     
-    if([msg.media isKindOfClass:[TL_messageMediaVideo class]]) {
+    if([msg.media isKindOfClass:[TL_messageMediaDocument class]]) {
         
         [self.loaderView setCenterByView:self];
         
         [self checkState:object];
     }
     
+}
+
+-(void)rightMouseDown:(NSEvent *)theEvent {
+    weak();
+    
+    NSMenu *menu = [[NSMenu alloc] init];
+    
+    NSMenuItem *photoGoto = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+        
+        PhotoCollectionImageObject *object = (PhotoCollectionImageObject *)self.object;
+        
+        [weakSelf.controller.navigationViewController showMessagesViewController:_controller.conversation withMessage:object.previewObject.media];
+        
+    }];
+    
+    [menu addItem:photoGoto];
+    
+    [NSMenu popUpContextMenu:menu withEvent:theEvent forView:self];
 }
 
 -(void)checkState:(PhotoCollectionImageObject *)object {
@@ -220,14 +240,19 @@ static NSImage *playVideoImage() {
     PhotoCollectionImageObject *object = (PhotoCollectionImageObject *)self.object;
 
     if([self isset:object]) {
-        TMPreviewVideoItem *item = [[TMPreviewVideoItem alloc] initWithItem:object.previewObject];
         
-        object.previewObject.reservedObject = self;
-        
-        if(item) {
-            [[TMMediaController controller] show:item];
+        if (floor(NSAppKitVersionNumber) > 1187)  {
+            
+            [[TGPhotoViewer viewer] show:object.previewObject conversation:self.controller.conversation];
+            
+        } else {
+            
+            TMPreviewVideoItem *item = [[TMPreviewVideoItem alloc] initWithItem:object.previewObject];
+            if(item) {
+                [[TMMediaController controller] show:item];
+            }
         }
-        return;
+        
     } else {
         DownloadVideoItem *downloadItem = object.previewObject.reservedObject;
         
@@ -245,8 +270,8 @@ static NSImage *playVideoImage() {
 
 
 -(BOOL)isset:(PhotoCollectionImageObject *)object {
-    NSString *path = mediaFilePath([(TL_localMessage *)object.previewObject.media media]);
-    return isPathExists(path) && [FileUtils checkNormalizedSize:path checksize:[(TL_localMessage *)object.previewObject.media media].video.size];
+    NSString *path = mediaFilePath(object.previewObject.media);
+    return isPathExists(path) && [FileUtils checkNormalizedSize:path checksize:[(TL_localMessage *)object.previewObject.media media].document.size];
 }
 
 -(NSImage *)cachedImage:(NSString *)key {

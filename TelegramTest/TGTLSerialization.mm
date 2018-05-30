@@ -11,9 +11,8 @@
 
 
 
-#import <MTProtoKit/MTDatacenterAddress.h>
-#import <MTProtoKit/MTDatacenterSaltInfo.h>
-#import <MtProtoKit/MTExportedAuthorizationData.h>
+#import <MtProtoKitMac/MTDatacenterAddress.h>
+#import <MtProtoKitMac/MTDatacenterSaltInfo.h>
 
 #import "MTProto.h"
 #import "TLApi.h"
@@ -49,26 +48,43 @@
     NSInputStream *is = [[NSInputStream alloc] initWithData:data];
     [is open];
     
-    id obj = [ClassStore constructObject:is];
-    if([obj isKindOfClass:[TL_gzip_packed class]]) {
-        obj = [ClassStore deserialize:[[obj packed_data] gzipInflate]];
+    @try {
+        id obj = [ClassStore constructObject:is];
+        if([obj isKindOfClass:[TL_gzip_packed class]]) {
+            obj = [ClassStore deserialize:[[obj packed_data] gzipInflate]];
+        }
+        
+        return obj;
+    }
+    @catch (NSException *exception) {
+        return nil;
     }
     
-    return obj;
+    
 }
 
 + (id)parseResponse:(NSData *)data request:(id)request
 {
     
-    NSInputStream *is = [[NSInputStream alloc] initWithData:data];
-    [is open];
-    
-    id obj = [ClassStore constructObject:is];
-    if([obj isKindOfClass:[TL_gzip_packed class]]) {
-        obj = [ClassStore deserialize:[[obj packed_data] gzipInflate]];
+    @try {
+        NSInputStream *is = [[NSInputStream alloc] initWithData:data];
+        [is open];
+        
+        id obj = [ClassStore constructObject:is];
+        if([obj isKindOfClass:[TL_gzip_packed class]]) {
+            obj = [ClassStore deserialize:[[obj packed_data] gzipInflate]];
+        }
+        
+        return obj;
     }
-    
-    return obj;
+   
+    @catch (NSException *exception) {
+        RpcError *error = [[RpcError alloc] init];
+        error.error_code = 500;
+        error.error_msg = exception.description;
+        return error;
+    }
+
 }
 
 - (MTExportAuthorizationResponseParser)exportAuthorization:(int32_t)datacenterId data:(__autoreleasing NSData **)data
@@ -114,7 +130,7 @@
             {
                 if (dcOption.n_id == datacenterId)
                 {
-                    MTDatacenterAddress *address = [[MTDatacenterAddress alloc] initWithIp:dcOption.ip_address port:(uint16_t)dcOption.port preferForMedia:(dcOption.flags & 1 << 1) == 1 << 1];
+                    MTDatacenterAddress *address = [[MTDatacenterAddress alloc] initWithIp:dcOption.ip_address port:(uint16_t)dcOption.port preferForMedia:dcOption.isMedia_only restrictToTcp:dcOption.isTcpo_only];
                     [addressList addObject:address];
                 }
             }
@@ -127,7 +143,7 @@
 
 - (NSUInteger)currentLayer
 {
-    return 32;
+    return 62;
 }
 
 @end

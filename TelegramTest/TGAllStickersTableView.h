@@ -7,20 +7,43 @@
 //
 
 #import "TMTableView.h"
+#import "TGStickerImageView.h"
+@interface TGAllStickerTableItemView : TMRowView
+@property (nonatomic,strong) TGStickerImageView *imageView;
+@end
 
+@interface TGAllStickersTableItem : TMRowItem
+@property (nonatomic,strong) NSMutableArray *stickers;
+@property (nonatomic,strong) NSMutableArray *objects;
+
+@property (nonatomic,assign) long packId;
+
+-(id)initWithObject:(NSArray *)object packId:(long)packId;
+@end
 
 @interface TGAllStickersTableView : TMTableView
 
-@property (nonatomic,assign,readonly) BOOL hasRecentStickers;
+@property (nonatomic,assign) BOOL hasRecentStickers;
 
--(void)removeSticker:(TL_outDocument *)document;
+@property (nonatomic,assign) BOOL canSendStickerAlways;
+
 -(void)load:(BOOL)force;
+
+@property (nonatomic,strong) dispatch_block_t didNeedReload;
 
 -(void)showWithStickerPack:(TL_messages_stickerSet *)stickerPack;
 
--(NSArray *)allStickers;
+@property (nonatomic,weak) MessagesViewController *messagesViewController;
+
+-(NSDictionary *)allStickers;
 -(NSArray *)sets;
 
--(void)scrollToStickerPack:(long)packId;
+-(void)hideStickerPreview;
+
+-(void)updateSets:(NSArray *)sets;
+
+-(void)scrollToStickerPack:(long)packId completionHandler:(dispatch_block_t)completionHandler;
+
++(void)addRecentSticker:(TLDocument *)document;
 
 @end

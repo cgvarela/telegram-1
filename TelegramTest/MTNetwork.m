@@ -1,15 +1,15 @@
 
 #import "MTNetwork.h"
 
-#import <MTProtoKit/MTKeychain.h>
-#import <MTProtoKit/MTDatacenterAuthInfo.h>
+#import <MtProtoKitMac/MTKeychain.h>
+#import <MtProtoKitMac/MTDatacenterAuthInfo.h>
 #import "MTConnection.h"
-#import <MTProtoKit/MTProtoKit.h>
+#import <MtProtoKitMac/MtProtoKitMac.h>
 #import "TGNetworkWorker.h"
 #import "TGUpdateMessageService.h"
 #import "RpcErrorParser.h"
 #import "DatacenterArchiver.h"
-#import <MTProtoKit/MTApiEnvironment.h>
+#import <MtProtoKitMac/MTApiEnvironment.h>
 #import "TGDatacenterWatchdogActor.h"
 #import "TGTimer.h"
 #import "TGKeychain.h"
@@ -18,10 +18,21 @@
 #import "SSKeychain.h"
 #import "TGTLSerialization.h"
 #import "TGPasslock.h"
+#import <Security/SecRandom.h>
+#import <MtProtoKitMac/MTRequestErrorContext.h>
+#import <MtProtoKitMac/MTInternalId.h>
+
+
+static const int TGMaxWorkerCount = 6;
+
+MTInternalIdClass(TGDownloadWorker)
+
+
 @implementation MTRequest (LegacyTL)
 
 - (void)setBody:(TLApiObject *)body
 {
+    
     [self setPayload:[TGTLSerialization serializeMessage:body] metadata:body responseParser:^id(NSData *data)
      {
          return [TGTLSerialization parseResponse:data request:body];
@@ -48,14 +59,12 @@
 @end
 
 
-@interface MTNetwork ()
+@interface MTNetwork () <TGNetworkWorkerDelegate>
 {
     MTContext *_context;
     MTProto *_mtProto;
     MTRequestMessageService *_requestService;
     TGUpdateMessageService *_updateService;
-    NSMutableDictionary *_objectiveDatacenter;
-    NSMutableArray *_pollConnections;
     NSUInteger _datacenterCount;
     NSUInteger _masterDatacenter;
     DatacenterArchiver *_datacenterArchived;
@@ -65,6 +74,9 @@
     TGTimer *_globalTimer;
     NSMutableArray *_dispatchTimers;
     TGKeychain *_keychain;
+    
+    NSMutableDictionary *_workersByDatacenterId;
+    NSMutableDictionary *_awaitingWorkerTokensByDatacenterId;
 }
 
 @end
@@ -106,9 +118,6 @@ static NSString *kDefaultDatacenter = @"default_dc";
             
             [self moveAndEncryptKeychain];
             
-            _objectiveDatacenter = [[NSMutableDictionary alloc] init];
-            _pollConnections = [[NSMutableArray alloc] init];
-            
             
             TGTLSerialization *serialization = [[TGTLSerialization alloc] init];
             
@@ -122,7 +131,8 @@ static NSString *kDefaultDatacenter = @"default_dc";
             _keychain = [self nKeychain];
             
             
-
+            _workersByDatacenterId = [[NSMutableDictionary alloc] init];
+            _awaitingWorkerTokensByDatacenterId = [[NSMutableDictionary alloc] init];
             
             [_keychain loadIfNeeded];
             
@@ -143,23 +153,37 @@ static NSString *kDefaultDatacenter = @"default_dc";
                         } synchronous:YES];
                         
                         if(acceptHash) {
-                                                        
-                            [_queue dispatchOnQueue:^{
-                                
-                                [self startWithKeychain:_keychain];
-                                [self initConnectionWithId:_masterDatacenter];
-                                
-                                
-                            }];
                             
-                             [Telegram initializeDatabase];
                             
-                            if(![self isAuth]) {
-                                [[Telegram delegate] logoutWithForce:YES];
-                            } else {
-                                [TGPasslock appIncomeActive];
-                            }
-                        } 
+                                [_queue dispatchOnQueue:^{
+                                    
+                                    [self updateStorageEncryptionKey];
+                                    [Storage updateOldEncryptionKey:md5Hash];
+                                    
+                                    [Storage initManagerWithCallback:^{
+                                    
+                                        [self startWithKeychain:_keychain];
+                                        [self initConnectionWithId:_masterDatacenter];
+                                        
+                                        
+                                        [ASQueue dispatchOnMainQueue:^{
+                                            [Telegram initializeDatabase];
+                                            
+                                            if(![self isAuth]) {
+                                                [[Telegram delegate] logoutWithForce:YES];
+                                            } else {
+                                                [TGPasslock appIncomeActive];
+                                            }
+                                        }];
+                                        
+                                    }];
+                                }];
+                                
+                            
+
+                            
+                            
+                        }
                         
                         
                         return acceptHash;
@@ -176,6 +200,9 @@ static NSString *kDefaultDatacenter = @"default_dc";
                 
                 
             } else {
+                
+                [self updateStorageEncryptionKey];
+                
                 [self startWithKeychain:_keychain];
                 
                 if(![self isAuth]) {
@@ -201,7 +228,6 @@ static NSString *kDefaultDatacenter = @"default_dc";
     NSString *applicationSupportPath = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES)[0];
     NSString *applicationName = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleName"];
     NSString * odirectory = [[applicationSupportPath stringByAppendingPathComponent:applicationName] stringByAppendingPathComponent:@"mtkeychain"];
-    
 
     BOOL isset = NO;
     
@@ -220,10 +246,10 @@ static NSString *kDefaultDatacenter = @"default_dc";
             [keychain updatePasscodeHash:[[NSData alloc] initWithEmptyBytes:32] save:YES];
             
             [[NSFileManager defaultManager] removeItemAtPath:odirectory error:nil];
-            
         }
         
     }
+    
 
 }
 
@@ -231,22 +257,35 @@ static NSString *kDefaultDatacenter = @"default_dc";
     return [_mtProto messageServiceQueue];
 }
 
+
+//        NSString * ndirectory = [[NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES)[0] stringByAppendingPathComponent:[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleName"]] stringByAppendingPathComponent:@"encrypt-mtkeychain"];
+//
+//        if([[NSFileManager defaultManager] fileExistsAtPath:ndirectory]) {
+//
+//            TGKeychain *keychain = [TGKeychain unencryptedKeychainWithName:BUNDLE_IDENTIFIER];
+//
+//            keychain->_encrypted = YES;
+//
+//            [keychain storeAllKeychain];
+//
+//            [[NSFileManager defaultManager] removeItemAtPath:ndirectory error:nil];
+//
+//        }
+
+
 -(TGKeychain *)nKeychain {
     
-    
+
 
     
 #ifndef TGDEBUG
     
-   // if(NSAppKitVersionNumber >= NSAppKitVersionNumber10_9)
-    //    return [TGKeychain keychainWithName:BUNDLE_IDENTIFIER];
-   // else
-        return [TGKeychain unencryptedKeychainWithName:BUNDLE_IDENTIFIER];
-#else 
+    if(NSAppKitVersionNumber >= NSAppKitVersionNumber10_9)
+        return [TGKeychain keychainWithName:BUNDLE_IDENTIFIER];
     
-//    if([[UsersManager currentUser].username isEqualToString:@"vihor"] && !isTestServer()) {
-//        return [TGKeychain keychainWithName:BUNDLE_IDENTIFIER];
-//    }
+    return [TGKeychain unencryptedKeychainWithName:BUNDLE_IDENTIFIER];
+    
+#else
     
     if(isTestServer())  {
         return [TGKeychain unencryptedKeychainWithName:@"org.telegram.test"];
@@ -308,9 +347,25 @@ static NSString *kDefaultDatacenter = @"default_dc";
    
 }
 
+
+-(NSString *)encryptionKey {
+    return [_keychain objectForKey:@"e_key" group:@"persistent"];
+}
+
+-(void)updateStorageEncryptionKey {
+    
+    NSString *key = [_keychain objectForKey:@"e_key" group:@"persistent"];
+    
+    if(!key)
+        [self updateEncryptionKey];
+     else
+        [Storage updateEncryptionKey:key];
+}
+
 -(void)startWithKeychain:(TGKeychain *)keychain {
     
     [_context setKeychain:keychain];
+    
     
     
     [_context addChangeListener:self];
@@ -337,13 +392,13 @@ static NSString *kDefaultDatacenter = @"default_dc";
     _datacenterCount = 5;
     
     
-    NSString *address = isTestServer() ? @"149.154.175.10" : @"149.154.167.51";
+    NSString *address = isTestServer() ? @"149.154.167.40" : @"149.154.167.51";
     
-    [_context setSeedAddressSetForDatacenterWithId:isTestServer() ? 1 : 2 seedAddressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[[[MTDatacenterAddress alloc] initWithIp:address port:443 preferForMedia:NO]]]];
+    [_context setSeedAddressSetForDatacenterWithId:isTestServer() ? 2 : 2 seedAddressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[[[MTDatacenterAddress alloc] initWithIp:address port:443 preferForMedia:NO restrictToTcp:NO]]]];
     
     
     if(!isTestServer()) {
-        _datacenterWatchdog = [[TGDatacenterWatchdogActor alloc] initWithPath:@"tg"];
+        _datacenterWatchdog = [[TGDatacenterWatchdogActor alloc] init];
         
         
         void (^execute)() = ^{
@@ -362,51 +417,51 @@ static NSString *kDefaultDatacenter = @"default_dc";
 }
 
 - (TGUpdateMessageService *)updateService {
-    return _updateService;
+    __block TGUpdateMessageService *s;
+    
+    [_queue dispatchOnQueue:^{
+        
+        s =  _updateService;
+        
+    } synchronous:YES];
+    
+    return s;
 }
 
 -(void)startNetwork {
     
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-         [self initConnectionWithId:_masterDatacenter];
-        
-         [_datacenterWatchdog execute:nil];
+        [_queue dispatchOnQueue:^{
+            [self initConnectionWithId:_masterDatacenter];
+            
+            [_datacenterWatchdog execute:nil];
+        }];
     });
 }
 
 -(void)update {
-    [_mtProto pause];
-    [_mtProto resume];
+    [_queue dispatchOnQueue:^{
+        [_mtProto pause];
+        [_mtProto resume];
+    }];
+    
+    
+    
 }
 
-static int MAX_WORKER_POLL = 5;
-
--(void)resetWorkers {
-    
-    
-    [_objectiveDatacenter removeAllObjects];
-    [_pollConnections removeAllObjects];
-    
-    for (int i = 1; i < _datacenterCount+1; i++) {
-        NSMutableArray *poll = [[NSMutableArray alloc] init];
-        
-        for (int j = 0; j < MAX_WORKER_POLL; j++) {
-            TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:i masterDatacenterId:_mtProto.datacenterId];
-            [poll addObject:worker];
-        }
-        [_objectiveDatacenter setObject:poll forKey:@(i)];
-    }
-    
-    for (int i = 1; i < _datacenterCount+1; i++) {
-        TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:_mtProto.datacenterId masterDatacenterId:_mtProto.datacenterId];
-        [_pollConnections addObject:worker];
-    }
++(void)pause {
+    [[self instance]->_mtProto pause];
 }
++(void)resume {
+    [[self instance]->_mtProto resume];
+}
+
 
 
 -(void)initConnectionWithId:(NSInteger)dc_id {
     
+    dc_id = dc_id == -1 ? _masterDatacenter : dc_id;
     
     [_queue dispatchOnQueue:^{
         
@@ -414,7 +469,7 @@ static int MAX_WORKER_POLL = 5;
             
             [_mtProto stop];
             
-            _mtProto = [[MTConnection alloc] initWithContext:_context datacenterId:dc_id];
+            _mtProto = [[MTConnection alloc] initWithContext:_context datacenterId:dc_id usageCalculationInfo:nil];
             
             _requestService = [[MTRequestMessageService alloc] initWithContext:_context];
             _updateService = [[TGUpdateMessageService alloc] init];
@@ -422,42 +477,97 @@ static int MAX_WORKER_POLL = 5;
             [_mtProto addMessageService:_requestService];
             [_mtProto addMessageService:_updateService];
             
-            [self resetWorkers];
-        } 
+            if([self isAuth]) {
+                [self checkServerChangelog];
+            }
+            
+        }
 
     }];
     
 }
 
+-(void)checkServerChangelog {
+    int local_v = (int) [[NSUserDefaults standardUserDefaults] integerForKey:@"version"];
+    
+    NSString *version = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+    
+    int current_v = [[NSString stringWithFormat:@"%@%@",[version componentsSeparatedByString:@"."][0],[version componentsSeparatedByString:@"."][1]] intValue];
+    
+    if(local_v == 0 || current_v < local_v) {
+        [RPCRequest sendRequest:[TLAPI_help_getAppChangelog create] successHandler:^(id request, TL_help_appChangelog *response) {
+            
+            [[NSUserDefaults standardUserDefaults] setInteger:current_v forKey:@"version"];
+            
+            if([response isKindOfClass:[TL_help_appChangelog class]]) {
+                [MessageSender addServiceNotification:response.message];
+            }
+                        
+            
+        } errorHandler:^(id request, RpcError *error) {
+        
+        }];
+    }
+}
+
 
 -(void)drop {
     
-    [_context removeAllAuthTokens];
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:kDefaultDatacenter];
-    NSString *appDomain = [[NSBundle mainBundle] bundleIdentifier];
-    [[NSUserDefaults standardUserDefaults] removePersistentDomainForName:appDomain];
+    [_queue dispatchOnQueue:^{
+        [_context removeAllAuthTokens];
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kDefaultDatacenter];
+        NSString *appDomain = [[NSBundle mainBundle] bundleIdentifier];
+        [[NSUserDefaults standardUserDefaults] removePersistentDomainForName:appDomain];
+        
+        
+        NSString *applicationSupportPath = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES)[0];
+        NSString *applicationName = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleName"];
+        
+        NSString * mtkeychain = [[applicationSupportPath stringByAppendingPathComponent:applicationName] stringByAppendingPathComponent:@"encrypt-mtkeychain"];
+        
+        [[NSFileManager defaultManager] removeItemAtPath:mtkeychain error:nil];
+        
+        [SSKeychain deletePasswordForService:appName() account:@"authkeys"];
+        
+        [_keychain cleanup];
+        [_keychain loadIfNeeded];
+        
+        [_keychain updatePasscodeHash:[[NSData alloc] initWithEmptyBytes:32] save:YES];
+        
+        [self.updateService drop];
+        [self setDatacenter:isTestServer() ? 1 : 2];
+        
+        
+        [self updateEncryptionKey];
+        
+        
+        
+    } synchronous:YES];
     
-    
-    NSString *applicationSupportPath = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES)[0];
-    NSString *applicationName = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleName"];
-    
-    NSString * mtkeychain = [[applicationSupportPath stringByAppendingPathComponent:applicationName] stringByAppendingPathComponent:@"encrypt-mtkeychain"];
-    
-    [[NSFileManager defaultManager] removeItemAtPath:mtkeychain error:nil];
-    
-    [SSKeychain deletePasswordForService:@"Telegram" account:@"authkeys"];
-    
-    [_keychain updatePasscodeHash:[[NSData alloc] initWithEmptyBytes:32] save:YES];
-    
-    [self.updateService drop];
-    [self setDatacenter:1];
-    
-    [self initConnectionWithId:_masterDatacenter];
 }
+
+-(NSString *)updateEncryptionKey {
+    uint8_t secKey[32];
+    SecRandomCopyBytes(kSecRandomDefault, 32, secKey);
+    
+    NSString *key = [[[NSString alloc] initWithData:[[NSData alloc] initWithBytes:secKey length:32] encoding:NSASCIIStringEncoding] md5];
+    
+    [_keychain setObject:key forKey:@"e_key" group:@"persistent"];
+    
+    [Storage updateEncryptionKey:key];
+    
+    return key;
+}
+
+
 
 -(int)getTime {
     
     return [_context globalTime];
+}
+
+-(int)globalTimeOffsetFromUTC {
+    return [_context globalTimeOffsetFromUTC];
 }
 
 -(int)currentDatacenter {
@@ -468,6 +578,7 @@ static int MAX_WORKER_POLL = 5;
     _masterDatacenter = dc_id;
     
     [_keychain setObject:@(dc_id) forKey:@"dc_id" group:@"persistent"];
+    
 }
 
 -(void)setUserId:(int)userId {
@@ -485,26 +596,47 @@ static int MAX_WORKER_POLL = 5;
 
 -(void)cancelRequest:(RPCRequest *)request {
     [_queue dispatchOnQueue:^{
-         [_requestService removeRequestByInternalId:request.mtrequest.internalId];
+        
+        if(request.guard) {
+            [request.guard.worker cancelRequestById:request.mtrequest.internalId];
+            request.guard = nil;
+        } else {
+            [_requestService removeRequestByInternalId:request.mtrequest.internalId];
+        }
+        
     }];
-    
-   
+}
+
+-(void)cancelRequestWithInternalId:(id)internalId {
+    [_queue dispatchOnQueue:^{
+        [_requestService removeRequestByInternalId:internalId];
+    }];
 }
 
 -(void)sendRequest:(RPCRequest *)request forDatacenter:(int)datacenterId {
     [_queue dispatchOnQueue:^{
-        NSMutableArray *poll = [_objectiveDatacenter objectForKey:@(datacenterId)];
         
-        TGNetworkWorker *worker = [poll objectAtIndex:rand_limit(MAX_WORKER_POLL-1)];
-        [worker addRequest:[self constructRequest:request]];
+        
+        [self requestDownloadWorkerForDatacenterId:datacenterId completion:^(TGNetworkWorkerGuard *guard) {
+            request.guard = guard;
+            [guard.worker addRequest:[self constructRequest:request]];
+        }];
+        
     }];
   
 }
 
+
+
 -(void)sendRandomRequest:(RPCRequest *)request {
     [_queue dispatchOnQueue:^{
-        TGNetworkWorker *worker = [_pollConnections objectAtIndex:rand_limit((int)_pollConnections.count-1)];
-        [worker addRequest:[self constructRequest:request]];
+        
+        [self requestDownloadWorkerForDatacenterId:self.currentDatacenter completion:^(TGNetworkWorkerGuard *guard) {
+            request.guard = guard;
+            [guard.worker addRequest:[self constructRequest:request]];
+            
+        }];
+        
     }];
 }
 
@@ -528,6 +660,7 @@ static int MAX_WORKER_POLL = 5;
             [TLAPI_messages_sendMessage class],
             [TLAPI_messages_sendMedia class],
             [TLAPI_messages_forwardMessage class],
+            [TLAPI_messages_forwardMessages class],
             [TLAPI_messages_sendEncrypted class],
             [TLAPI_messages_sendEncryptedFile class],
             [TLAPI_messages_sendEncryptedService class]
@@ -574,6 +707,13 @@ static int MAX_WORKER_POLL = 5;
          
     }];
     
+    
+    if(request.alwayContinueWithErrorContext) {
+        [mtrequest setShouldContinueExecutionWithErrorContext:^bool(MTRequestErrorContext *errorContext) {
+            return false;
+        }];
+    }
+    
     return mtrequest;
 }
 
@@ -584,7 +724,7 @@ static int MAX_WORKER_POLL = 5;
         
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
-            noAuthClasses = @[[TLAPI_auth_sendCall class], [TLAPI_auth_signIn class], [TLAPI_auth_signUp class], [TLAPI_auth_sendCode class], [TLAPI_auth_checkPhone class], [TLAPI_help_getConfig class], [TLAPI_help_getNearestDc class], [TLAPI_auth_sendSms class], [TLAPI_account_deleteAccount class], [TLAPI_account_getPassword class], [TLAPI_auth_checkPassword class], [TLAPI_auth_requestPasswordRecovery class], [TLAPI_auth_recoverPassword class]];
+            noAuthClasses = @[[TLAPI_auth_resendCode class],[TLAPI_auth_signIn class], [TLAPI_auth_signUp class], [TLAPI_auth_sendCode class], [TLAPI_auth_checkPhone class], [TLAPI_help_getConfig class], [TLAPI_help_getNearestDc class], [TLAPI_account_deleteAccount class], [TLAPI_account_getPassword class], [TLAPI_auth_checkPassword class], [TLAPI_auth_requestPasswordRecovery class], [TLAPI_auth_recoverPassword class]];
         });
         
         if([self isAuth] || ([noAuthClasses containsObject:[request.object class]])) {
@@ -593,9 +733,24 @@ static int MAX_WORKER_POLL = 5;
     }];
 }
 
+-(void)addRequest:(MTRequest *)request {
+    [_queue dispatchOnQueue:^{
+        
+        if([self isAuth]) {
+             [_requestService addRequest:request];
+        }
+        
+    }];
+}
+
 -(void)successAuthForDatacenter:(int)dc_id {
     [_queue dispatchOnQueue:^{
         [_context updateAuthTokenForDatacenterWithId:dc_id authToken:@(dc_id)];
+        
+        if(dc_id == _masterDatacenter) {
+           // [self resetWorkers];
+        }
+        
     }];
     
 }
@@ -633,9 +788,12 @@ static int MAX_WORKER_POLL = 5;
 }
 - (void)contextDatacenterAuthInfoUpdated:(MTContext *)context datacenterId:(NSInteger)datacenterId authInfo:(MTDatacenterAuthInfo *)authInfo {
     
+    
 }
 - (void)contextDatacenterAuthTokenUpdated:(MTContext *)context datacenterId:(NSInteger)datacenterId authToken:(id)authToken {
     MTLog(@"");
+    
+    
 }
 
 - (void)contextIsPasswordRequiredUpdated:(MTContext *)context datacenterId:(NSInteger)datacenterId
@@ -733,6 +891,302 @@ void remove_global_dispatcher(id internalId) {
         
     }];
     
+}
+
+- (SSignal *)requestSignal:(TLApiObject *)rpc {
+    return [self requestSignal:rpc queue:nil];
+}
+
+- (SSignal *)requestSignal:(TLApiObject *)rpc queue:(ASQueue *)queue
+{
+    return [self requestSignal:rpc continueOnServerErrors:false queue:queue];
+}
+
+- (SSignal *)requestSignal:(TLApiObject *)rpc continueOnServerErrors:(bool)continueOnServerErrors queue:(ASQueue *)queue
+{
+    return [self requestSignal:rpc requestClass:continueOnServerErrors ? 0 : TGRequestClassFailOnServerErrors queue:queue];
+}
+
+- (SSignal *)requestSignal:(TLApiObject *)rpc requestClass:(int)requestClass queue:(ASQueue *)queue
+{
+    
+    static NSArray *noAuthClasses;
+    
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        noAuthClasses = @[[TLAPI_auth_resendCode class],[TLAPI_auth_signIn class], [TLAPI_auth_signUp class], [TLAPI_auth_sendCode class], [TLAPI_auth_checkPhone class], [TLAPI_help_getConfig class], [TLAPI_help_getNearestDc class], [TLAPI_account_deleteAccount class], [TLAPI_account_getPassword class], [TLAPI_auth_checkPassword class], [TLAPI_auth_requestPasswordRecovery class], [TLAPI_auth_recoverPassword class]];
+    });
+    
+    if(![self isAuth] && ([noAuthClasses containsObject:[rpc class]])) {
+        return [SSignal fail:rpc];
+    }
+    
+    
+    return [[SSignal alloc] initWithGenerator:^(SSubscriber *subscriber)
+            {
+                MTRequest *request = [[MTRequest alloc] init];
+                request.body = rpc;
+                [request setCompleted:^(id result, __unused NSTimeInterval timestamp, id error)
+                 {
+                     
+
+                     
+                     dispatch_block_t block = ^{
+                         if (error == nil && ![result isKindOfClass:[RpcError class]])
+                         {
+                             
+                             dispatch_async([_mtProto messageServiceQueue].nativeQueue, ^{
+                                 [self.updateService mtProto:_mtProto receivedParsedMessage:result];
+                             });
+
+                             [subscriber putNext:result];
+                             [subscriber putCompletion];
+                         }
+                         else
+                             [subscriber putError:error];
+                     };
+                     
+                     if(queue)
+                         [queue dispatchOnQueue:block];
+                     else
+                         dispatch_async(dispatch_get_main_queue(), block);
+                     
+                     
+                 }];
+                
+                
+                
+                static NSArray *dependsOnPwd;
+                static NSArray *sequentialMessageClasses = nil;
+                static dispatch_once_t onceToken;
+                dispatch_once(&onceToken, ^
+                              {
+                    dependsOnPwd = @[[TLAPI_account_deleteAccount class], [TLAPI_account_getPassword class], [TLAPI_auth_checkPassword class], [TLAPI_auth_requestPasswordRecovery class], [TLAPI_auth_recoverPassword class]];
+                                  
+                    sequentialMessageClasses = @[ [TLAPI_messages_sendMessage class],
+                                                [TLAPI_messages_sendMedia class],
+                                                [TLAPI_messages_forwardMessage class],
+                                                [TLAPI_messages_forwardMessages class],
+                                                [TLAPI_messages_sendEncrypted class],
+                                                [TLAPI_messages_sendEncryptedFile class],
+                                                [TLAPI_messages_sendEncryptedService class]
+                                                ];
+                });
+                
+                if([dependsOnPwd containsObject:[request.body class]]) {
+                    request.dependsOnPasswordEntry = NO;
+                }
+                
+                
+                for (Class sequentialClass in sequentialMessageClasses)
+                {
+                    if ([rpc isKindOfClass:sequentialClass])
+                    {
+                        [request setShouldDependOnRequest:^bool (MTRequest *anotherRequest)
+                         {
+                             for (Class sequentialClass in sequentialMessageClasses)
+                             {
+                                 if ([anotherRequest.body isKindOfClass:sequentialClass])
+                                     return true;
+                             }
+                             
+                             return false;
+                         }];
+                        
+                        break;
+                    }
+                }
+                
+                
+                if([sequentialMessageClasses containsObject:[request.body class]]) {
+                    request.hasHighPriority = true;
+                }
+               
+                
+                [request setShouldContinueExecutionWithErrorContext:^bool(__unused MTRequestErrorContext *errorContext)
+                 {
+                     if (errorContext.floodWaitSeconds > 0)
+                     {
+                         if (requestClass & TGRequestClassFailOnFloodErrors)
+                             return false;
+                     }
+                     
+                     if (!(requestClass & TGRequestClassFailOnServerErrors))
+                         return errorContext.internalServerErrorCount < 5;
+                     return true;
+                 }];
+                
+                [_requestService addRequest:request];
+                id requestToken = request.internalId;
+                
+                return [[SBlockDisposable alloc] initWithBlock:^
+                        {
+                            [_requestService removeRequestByInternalId:requestToken];
+                        }];
+            }];
+}
+
+- (SSignal *)requestSignal:(TLApiObject *)rpc worker:(TGNetworkWorkerGuard *)worker
+{
+    return [[SSignal alloc] initWithGenerator:^(SSubscriber *subscriber)
+            {
+                MTRequest *request = [[MTRequest alloc] init];
+                request.body = rpc;
+                [request setCompleted:^(id result, __unused NSTimeInterval timestamp, id error)
+                 {
+                     if (error == nil)
+                     {
+                         dispatch_async([_mtProto messageServiceQueue].nativeQueue, ^{
+                             [self.updateService mtProto:_mtProto receivedParsedMessage:result];
+                         });
+
+                         
+                         [subscriber putNext:result];
+                         [subscriber putCompletion];
+                     }
+                     else
+                     {
+                         [subscriber putError:error];
+                     }
+                 }];
+                
+                [request setProgressUpdated:^(float value, __unused NSUInteger completeSize)
+                 {
+                     [subscriber putNext:@(value)];
+                 }];
+                
+                [request setShouldContinueExecutionWithErrorContext:^bool(__unused MTRequestErrorContext *errorContext)
+                 {
+                     return true;
+                 }];
+                
+                [(TGNetworkWorker *)worker.worker addRequest:request];
+                id requestToken = request.internalId;
+                
+                return [[SBlockDisposable alloc] initWithBlock:^
+                        {
+                            [(TGNetworkWorker *)worker.worker cancelRequestById:requestToken];
+                        }];
+            }];
+}
+
+
+- (id)requestDownloadWorkerForDatacenterId:(NSInteger)datacenterId completion:(void (^)(TGNetworkWorkerGuard *))completion
+{
+    id token = [[MTInternalId(TGDownloadWorker) alloc] init];
+    [_queue dispatchOnQueue:^
+     {
+         NSMutableArray *awaitingWorkerTokenList = _awaitingWorkerTokensByDatacenterId[@(datacenterId)];
+         if (awaitingWorkerTokenList == nil)
+         {
+             awaitingWorkerTokenList = [[NSMutableArray alloc] init];
+             _awaitingWorkerTokensByDatacenterId[@(datacenterId)] = awaitingWorkerTokenList;
+         }
+         
+         [awaitingWorkerTokenList addObject:@[token, [completion copy]]];
+         
+         [self _processWorkerQueue];
+     }];
+    return token;
+}
+
+- (void)_processWorkerQueue
+{
+    [_queue dispatchOnQueue:^
+     {
+         [_awaitingWorkerTokensByDatacenterId enumerateKeysAndObjectsUsingBlock:^(__unused NSNumber *nDatacenterId, NSMutableArray *list, __unused BOOL *stop)
+          {
+              if (list.count != 0)
+              {
+                  NSMutableArray *workerList = _workersByDatacenterId[nDatacenterId];
+                  if (workerList == nil)
+                  {
+                      workerList = [[NSMutableArray alloc] init];
+                      _workersByDatacenterId[nDatacenterId] = workerList;
+                  }
+                  
+                  TGNetworkWorker *selectedWorker = nil;
+                  for (TGNetworkWorker *worker in workerList)
+                  {
+                      if (!worker.isBusy)
+                      {
+                          selectedWorker = worker;
+                          break;
+                      }
+                  }
+                  
+                  if (selectedWorker == nil && workerList.count < TGMaxWorkerCount)
+                  {
+                      TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:[nDatacenterId integerValue] masterDatacenterId:_masterDatacenter queue:_queue];
+                      worker.delegate = self;
+                      [workerList addObject:worker];
+                      
+                      selectedWorker = worker;
+                  }
+                  
+                  if (selectedWorker != nil)
+                  {
+                      NSArray *desc = list[0];
+                      [list removeObjectAtIndex:0];
+                      
+                      [selectedWorker setIsBusy:true];
+                      TGNetworkWorkerGuard *guard = [[TGNetworkWorkerGuard alloc] initWithWorker:selectedWorker];
+                      ((void (^)(TGNetworkWorkerGuard *))desc[1])(guard);
+                  }
+              }
+          }];
+     }];
+}
+
+- (void)cancelDownloadWorkerRequestByToken:(id)token
+{
+    [_queue dispatchOnQueue:^
+     {
+         [_awaitingWorkerTokensByDatacenterId enumerateKeysAndObjectsUsingBlock:^(__unused NSNumber *nDatacenterId, NSMutableArray *list, __unused BOOL *stop)
+          {
+              NSInteger index = -1;
+              for (NSArray *desc in list)
+              {
+                  index++;
+                  if ([desc[0] isEqual:token])
+                  {
+                      [list removeObjectAtIndex:(NSUInteger)index];
+                      
+                      break;
+                  }
+              }
+          }];
+     }];
+}
+
+- (void)networkWorkerDidBecomeAvailable:(TGNetworkWorker *)__unused networkWorker
+{
+    [_queue dispatchOnQueue:^
+     {
+         [self _processWorkerQueue];
+     }];
+}
+
+- (void)networkWorkerReadyToBeRemoved:(TGNetworkWorker *)networkWorker
+{
+    [_queue dispatchOnQueue:^
+     {
+         [_workersByDatacenterId enumerateKeysAndObjectsUsingBlock:^(__unused NSNumber *nDatacenterId, NSMutableArray *workers, __unused BOOL *stop)
+          {
+              NSInteger index = -1;
+              for (TGNetworkWorker *worker in workers)
+              {
+                  index++;
+                  
+                  if (worker == networkWorker)
+                  {
+                      [workers removeObjectAtIndex:(NSUInteger)index];
+                      
+                      break;
+                  }
+              }
+          }];
+     }];
 }
 
 

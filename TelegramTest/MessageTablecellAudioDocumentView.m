@@ -11,19 +11,19 @@
 #import "TMMediaController.h"
 #import "TLPeer+Extensions.h"
 #import "TMPreviewDocumentItem.h"
-#import "DownloadAudioItem.h"
 #import "TMCircularProgress.h"
 #import "MessageTableItemAudio.h"
 
 #import "TGTimer.h"
 #import "NSStringCategory.h"
 #import "TGAudioPlayerWindow.h"
-#define OFFSET 75.0f
+#import "TGCTextView.h"
 
-@interface MessageTablecellAudioDocumentView()<TGAudioPlayerWindowDelegate>
-
-
-@property (nonatomic,assign) TGAudioPlayerState audioState;
+@interface MessageTablecellAudioDocumentView()<TGAudioPlayerGlobalDelegate>
+@property (nonatomic,assign) TGAudioPlayerGlobalState audioState;
+@property (nonatomic,strong) BTRButton *playView;
+@property (nonatomic,strong) TGCTextView *nameView;
+@property (nonnull,strong) TMView *cView;
 @end
 
 @implementation MessageTablecellAudioDocumentView
@@ -42,50 +42,43 @@
         
         weak();
         
-        self.playerButton = [[BTRButton alloc] initWithFrame:NSMakeRect(0, 0, blueBackground().size.width, blueBackground().size.height)];
+        _cView= [[TMView alloc] initWithFrame:self.containerView.bounds];
         
-        [self.playerButton addBlock:^(BTRControlEvents events) {
+        [self.containerView addSubview:_cView];
+        
+        
+        
+        self.playView = [[BTRButton alloc] initWithFrame:NSMakeRect(0, 0, blue_circle_background_image().size.width, blue_circle_background_image().size.height)];
+        
+        [self.playView addBlock:^(BTRControlEvents events) {
             
-            [TGAudioPlayerWindow show:weakSelf.item.message.conversation];
-            [TGAudioPlayerWindow setCurrentItem:(MessageTableItemAudioDocument *)weakSelf.item];
-            
-            
+            if(weakSelf.item.isset) {
+                [TGAudioPlayerWindow show:weakSelf.item.message.conversation navigation:weakSelf.item.table.viewController.navigationViewController];
+                [[TGAudioGlobalController globalController:weakSelf.messagesViewController.navigationViewController] setCurrentItem:(MessageTableItemAudioDocument *)weakSelf.item];
+
+            } else {
+                [weakSelf checkOperation];
+            }
+              
         } forControlEvents:BTRControlEventClick];
+        [_playView setBackgroundImage:blue_circle_background_image() forControlState:BTRControlStateNormal];
+
+        [_cView addSubview:_playView];
+    
+        _nameView = [[TGCTextView alloc] initWithFrame:NSZeroRect];
         
-        [self.containerView addSubview:self.playerButton];
+        [_cView addSubview:_nameView];
         
-        self.durationView = [[TMTextField alloc] initWithFrame:NSMakeRect(self.playerButton.frame.size.width + 8, NSMinY(self.playerButton.frame) + NSHeight(self.playerButton.frame) - 30, 100, 23)];
-        [self.durationView setEnabled:NO];
-        [self.durationView setBordered:NO];
-        [self.durationView setEditable:NO];
-        [self.durationView setDrawsBackground:NO];
-        [self.durationView setStringValue:@"00:00 / 00:00"];
+        [self.progressView setImage:image_DownloadIconWhite() forState:TMLoaderViewStateNeedDownload];
+        [self.progressView setImage:image_LoadCancelWhiteIcon() forState:TMLoaderViewStateDownloading];
+        [self.progressView setImage:image_LoadCancelWhiteIcon() forState:TMLoaderViewStateUploading];
         
-        [[self.durationView cell] setLineBreakMode:NSLineBreakByTruncatingTail];
-        [self.durationView setFont:[NSFont fontWithName:@"HelveticaNeue" size:12]];
-        [self.durationView sizeToFit];
-        [self.durationView setTextColor:DARK_BLACK];
-        [self.containerView addSubview:self.durationView];
-        
-        self.stateTextField = [[TMTextField alloc] initWithFrame:NSZeroRect];
-        [self.stateTextField setEnabled:NO];
-        [self.stateTextField setBordered:NO];
-        [self.stateTextField setEditable:NO];
-        [self.stateTextField setDrawsBackground:NO];
-        [self.stateTextField setFont:[NSFont fontWithName:@"HelveticaNeue" size:12]];
-        [self.stateTextField setTextColor:NSColorFromRGB(0xbebebe)];
-        
-        
-        [self.containerView addSubview:self.stateTextField];
-        
-        
-        [self.progressView setImage:image_DownloadIconGrey() forState:TMLoaderViewStateNeedDownload];
-        [self.progressView setImage:image_LoadCancelGrayIcon() forState:TMLoaderViewStateDownloading];
-        [self.progressView setImage:image_LoadCancelGrayIcon() forState:TMLoaderViewStateUploading];
+        [self setProgressFrameSize:_playView.frame.size];
         
         [self setProgressStyle:TMCircularProgressLightStyle];
+        [self.progressView setProgressColor:[NSColor whiteColor]];
+        [self setProgressToView:_playView];
         
-        [self setProgressToView:self.playerButton];
         
         [TGAudioPlayerWindow addEventListener:self];
         
@@ -97,73 +90,49 @@
     [TGAudioPlayerWindow removeEventListener:self];
 }
 
--(void)playerDidChangedState:(MessageTableItemAudioDocument *)item playerState:(TGAudioPlayerState)state {
+-(void)playerDidChangedState:(MessageTableItemAudioDocument *)item playerState:(TGAudioPlayerGlobalState)state {
     
     if(item.message.n_id != self.item.message.n_id)
     {
-        self.audioState = TGAudioPlayerStatePaused;
+        self.audioState = TGAudioPlayerGlobalStatePaused;
     } else {
         self.audioState = state;
     }
-    
-    
-    
+
 }
 
--(void)setAudioState:(TGAudioPlayerState)audioState {
+-(void)setAudioState:(TGAudioPlayerGlobalState)audioState {
     _audioState = audioState;
     
-    [self updateCellState];
+    [self updateCellState:NO];
 }
 
--(float)progressWidth {
-    return MAX(150, MIN(self.item.blockSize.width, self.item.message.media.document.duration * 30));
-}
-
-- (NSRect)progressRect {
-    return NSMakeRect(self.containerView.frame.origin.x + self.playerButton.frame.size.width + 10, NSMinY(self.playerButton.frame) + NSHeight(self.playerButton.frame) - 27, [self progressWidth], 3);
-}
-
--(void)setDurationTextFieldString:(NSString *)string {
-    [self.durationView setStringValue:self.item.duration];
-    [self.durationView setFrameSize:NSMakeSize([self progressWidth] - self.stateTextField.frame.size.width , NSHeight(self.durationView.frame))];
-}
 
 -(void)drawRect:(NSRect)dirtyRect {
     
 }
 
-- (void)setCellState:(CellState)cellState {
-    //    if(self.cellState == cellState)
-    //        return;
-    [super setCellState:cellState];
+- (void)setCellState:(CellState)cellState animated:(BOOL)animated  {
+    [super setCellState:cellState animated:animated];
     
-
     
-    [self.progressView setState:cellState];
-    
-    if(self.item.state == AudioStateWaitPlaying || self.item.state == AudioStatePaused || self.item.state == AudioStatePlaying) {
-        [self.playerButton setBackgroundImage:blueBackground() forControlState:BTRControlStateNormal];
-    } else {
-        [self.playerButton setBackgroundImage:grayBackground() forControlState:BTRControlStateNormal];
-    }
     
     switch (self.audioState) {
-        case TGAudioPlayerStatePaused:
-            [self.playerButton setImage:playImage() forControlState:BTRControlStateNormal];
+        case TGAudioPlayerGlobalStatePaused:
+            [_playView setImage:voice_play_image() forControlState:BTRControlStateNormal];
             break;
             
-        case TGAudioPlayerStatePlaying:
-            [self.playerButton setImage:image_DownloadPauseIconWhite() forControlState:BTRControlStateNormal];
+        case TGAudioPlayerGlobalStatePlaying:
+            [_playView setImage:image_VoicePause() forControlState:BTRControlStateNormal];
             break;
-        case TGAudioPlayerStateForcePaused: default :
-            [self.playerButton setImage:playImage() forControlState:BTRControlStateNormal];
+        case TGAudioPlayerGlobalStateForcePaused: default :
+            [_playView setImage:voice_play_image() forControlState:BTRControlStateNormal];
             break;
     }
     
-    if(self.cellState == CellStateDownloading || self.cellState == CellStateNeedDownload || self.cellState == CellStateDownloading)
+    if(self.cellState == CellStateDownloading || self.cellState == CellStateNeedDownload || self.cellState == CellStateDownloading || self.item.messageSender != nil)
     {
-        [self.playerButton setImage:nil forControlState:BTRControlStateNormal];
+        [_playView setImage:nil forControlState:BTRControlStateNormal];
     }
     
     [self setNeedsDisplay:YES];
@@ -171,48 +140,45 @@
 }
 
 
-- (void)updateCellState {
+- (void)updateCellState:(BOOL)animated {
     MessageTableItemAudio *item = (MessageTableItemAudio *)self.item;
     
-    
     if(item.messageSender) {
-        self.item.state = AudioStateUploading;
-        self.cellState = CellStateSending;
+        [self setCellState:CellStateSending animated:animated];
         return;
     }
     
     if(item.downloadItem && item.downloadItem.downloadState != DownloadStateCompleted && item.downloadItem.downloadState != DownloadStateWaitingStart) {
-        self.item.state = item.downloadItem.downloadState == DownloadStateCanceled ? AudioStateWaitDownloading : AudioStateDownloading;
-        self.cellState = item.downloadItem.downloadState == DownloadStateCanceled ? CellStateCancelled : CellStateDownloading;
-
-        
+        [self setCellState:item.downloadItem.downloadState == DownloadStateCanceled ? CellStateCancelled : CellStateDownloading animated:YES];
     } else  if(![self.item isset]) {
-        self.item.state = AudioStateWaitDownloading;
-        self.cellState = CellStateNeedDownload;
-        
+        [self setCellState:CellStateNeedDownload animated:animated];
     } else {
-        self.item.state = AudioStateWaitPlaying;
-        self.cellState = CellStateNormal;
+        [self setCellState:CellStateNormal animated:animated];
     }
-    
-    
 }
 
 
 - (NSMenu *)contextMenu {
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Documents menu"];
     
+    weak();
+    
+    MessageTableItemAudioDocument *item = (MessageTableItemAudioDocument *)self.item;
+    
     if([self.item isset]) {
-        [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Message.File.ShowInFinder", nil) withBlock:^(id sender) {
-            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:self.item.path]]];
-        }]];
+        
+        if(![self.item.message isKindOfClass:[TL_destructMessage class]]) {
+            [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Message.File.ShowInFinder", nil) withBlock:^(id sender) {
+                [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:item.path]]];
+            }]];
+        }
         
         [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.SaveAs", nil) withBlock:^(id sender) {
-            [self performSelector:@selector(saveAs:) withObject:self];
+            [weakSelf performSelector:@selector(saveAs:) withObject:weakSelf];
         }]];
         
         [menu addItem:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.CopyToClipBoard", nil) withBlock:^(id sender) {
-            [self performSelector:@selector(copy:) withObject:self];
+            [weakSelf performSelector:@selector(copy:) withObject:weakSelf];
         }]];
         
         
@@ -231,34 +197,34 @@
 - (void)setItem:(MessageTableItemAudioDocument *)item {
     [super setItem:item];
     
-    item.cellView = self;
-    
-    if([TGAudioPlayerWindow currentItem].message.n_id == item.message.n_id)
+    if([TGAudioGlobalController globalController:self.messagesViewController.navigationViewController].currentItem.message.n_id == item.message.n_id)
         _audioState = [TGAudioPlayerWindow playerState];
      else
-        _audioState = TGAudioPlayerStatePaused;
+        _audioState = TGAudioPlayerGlobalStatePaused;
+    
+    [_cView setFrame:NSMakeRect(0, 0, NSWidth(self.containerView.frame), NSHeight(self.playView.frame))];
+    
+    [_nameView setAttributedString:item.nameAttributedString];
+    [_nameView setFrame:NSMakeRect(NSMaxX(_playView.frame) + item.defaultOffset, 0, item.nameSize.width, item.nameSize.height)];
+    [_nameView setCenteredYByView:_nameView.superview];
+
     
     
-    self.acceptTimeChanger = NO;
+    [self updateDownloadState:NO];
     
-    [self updateDownloadState];
-    
-    
-    [self setStateTextFieldString:[NSString sizeToTransformedValuePretty:self.item.size]];
-    
-    [self setDurationTextFieldString:item.duration];
-    
-    [self.stateTextField setFrameOrigin:NSMakePoint(self.durationView.frame.origin.x + self.durationView.frame.size.width, self.durationView.frame.origin.y )];
-    
-    if(item.state != AudioStatePlaying && item.state != AudioStatePaused)
-        [self updateCellState];
-    else {
-        self.cellState = self.cellState;
-        if(item.state != AudioStatePaused)
-            [self startTimer];
-    }
+    [self updateCellState:NO];
     
     
+}
+
+-(void)_didChangeBackgroundColorWithAnimation:(POPBasicAnimation *)anim toColor:(NSColor *)color {
+    
+    [super _didChangeBackgroundColorWithAnimation:anim toColor:color];
+    
+    if(!anim)
+        _nameView.backgroundColor = color;
+    else
+        [_nameView pop_addAnimation:anim forKey:@"background"];
 }
 
 

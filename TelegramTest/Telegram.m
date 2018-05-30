@@ -12,6 +12,8 @@
 #import "TGEnterPasswordPanel.h"
 #import "NSString+FindURLs.h"
 #import "ASCommon.h"
+#import "TGModernConversationHistoryController.h"
+
 #define ONLINE_EXPIRE 120
 #define OFFLINE_AFTER 5
 
@@ -26,7 +28,8 @@
 @implementation Telegram
 
 +(void)setConnectionState:(ConnectingStatusType)state {
-    [[Telegram rightViewController].navigationViewController.nagivationBarView setConnectionState:state];
+    [Notification perform:CONNECTION_STATUS_CHANGED data:@{KEY_DATA:@(state)}];
+
 }
 
 + (Telegram *)sharedInstance {
@@ -34,7 +37,7 @@
 }
 
 +(TL_conversation *)conversation {
-    return [Telegram rightViewController].messagesViewController.conversation;
+    return appWindow().navigationController.messagesViewController.conversation;
 }
 
 + (AppDelegate *)delegate {
@@ -104,12 +107,17 @@ Telegram *TelegramInstance() {
     self.accountStatusTimer = [[TGTimer alloc] initWithTimeout:ONLINE_EXPIRE - 5 repeat:YES completion:^{
         _isOnline = NO;
         [self setAccountOnline];
-    } queue:[ASQueue globalQueue].nativeQueue];
+    } queue:[ASQueue globalQueue]._dispatch_queue];
     [self.accountStatusTimer start];
 }
 
-static int max_chat_users = 200;
+static int max_chat_users = 199;
 static int max_broadcast_users = 100;
+static int megagroup_size_max = 5000;
+static int rating_e_decay_l = 2419200;
+static int stickers_recent_limit_l = 30;
+static int _chat_pin_limit = 5;
+static int edit_time_limit_default = 2*24*60*60;
 
 void setMaxChatUsers(int c) {
     max_chat_users = c;
@@ -117,6 +125,21 @@ void setMaxChatUsers(int c) {
 
 int maxChatUsers() {
     return max_chat_users;
+}
+void set_rating_e_decay(int c) {
+    rating_e_decay_l = c;
+}
+
+int rating_e_decay() {
+    return rating_e_decay_l;
+}
+
+int edit_time_limit() {
+    return edit_time_limit_default;
+}
+
+void set_edit_time_limit(int limit) {
+    edit_time_limit_default = limit;
 }
 
 void setMaxBroadcastUsers(int b) {
@@ -127,12 +150,36 @@ int maxBroadcastUsers() {
     return max_broadcast_users;
 }
 
+int stickers_recent_limit() {
+    return stickers_recent_limit_l;
+}
+
+void set_stickers_recent_limit(int limit) {
+    stickers_recent_limit_l = MAX(30, limit);
+}
+
+void setMegagroupSizeMax(int b) {
+    megagroup_size_max = b;
+}
+
+int megagroupSizeMax() {
+    return megagroup_size_max;
+}
+
+int chat_pin_limit() {
+    return _chat_pin_limit;
+}
+
+void set_chat_pin_limit(int limit) {
+    _chat_pin_limit = MAX(5, limit);
+}
+
 - (BOOL)canBeOnline {
     return ([[NSApplication sharedApplication] isActive] && SystemIdleTime() < 30 );
 }
 
 - (void)setAccountOffline:(BOOL)force {
-    if([SettingsArchiver checkMaskedSetting:OnlineForever])
+    if([SettingsArchiver checkMaskedSetting:OnlineForever]  || ![Storage isInitialized])
         return;
     
     if(force) {
@@ -145,6 +192,10 @@ int maxBroadcastUsers() {
             
             [[UsersManager sharedManager] setUserStatus:[TL_userStatusOffline createWithWas_online:[[MTNetwork instance] getTime]] forUid:[UsersManager currentUserId]];
             
+            TGInputMessageTemplate *template = [TGInputMessageTemplate templateWithType:TGInputMessageTemplateTypeSimpleText ofPeerId:[Telegram conversation].peer_id];
+            
+            [template saveTemplateInCloudIfNeeded];
+            
             MTLog(@"account is offline");
             
         } errorHandler:nil];
@@ -152,7 +203,7 @@ int maxBroadcastUsers() {
         if(!self.accountOfflineStatusTimer) {
             self.accountOfflineStatusTimer = [[TGTimer alloc] initWithTimeout:OFFLINE_AFTER repeat:NO completion:^{
                 [self setAccountOffline:YES];
-            } queue:[ASQueue globalQueue].nativeQueue];
+            } queue:[ASQueue globalQueue]._dispatch_queue];
             [self.accountOfflineStatusTimer start];
         }
     }
@@ -166,7 +217,7 @@ int maxBroadcastUsers() {
 - (void)setAccountOnline {
     
     
-    if(![self canBeOnline]) {
+    if(![self canBeOnline] || ![Storage isInitialized]) {
         [self setAccountOffline:YES];
         return;
     }
@@ -174,7 +225,7 @@ int maxBroadcastUsers() {
     [self.accountOfflineStatusTimer invalidate];
     self.accountOfflineStatusTimer = nil;
     
-    if([[UsersManager currentUser] isOnline])
+    if([[UsersManager currentUser] isOnline] )
         return;
     
     
@@ -202,7 +253,7 @@ int maxBroadcastUsers() {
 }
 
 - (void)showMessagesFromDialog:(TL_conversation *)d sender:(id)sender {
-    [[Telegram rightViewController] showByDialog:d sender:(id)sender];
+    [appWindow().navigationController showMessagesViewController:d];
 }
 
 - (void)showMessagesWidthUser:(TLUser *)user sender:(id)sender {
@@ -217,11 +268,6 @@ int maxBroadcastUsers() {
     [self showMessagesFromDialog:dn sender:sender];
 }
 
-- (void)showUserInfoWithUserId:(int)userID conversation:(TL_conversation *)conversation sender:(id)sender {
-    TLUser  *user = [[UsersManager sharedManager] find:userID];
-    
-    [self showUserInfoWithUser:user conversation:conversation sender:sender];
-}
 
 - (void)showNotSelectedDialog {
 
@@ -229,15 +275,9 @@ int maxBroadcastUsers() {
 }
 
 
-- (void)showUserInfoWithUser:(TLUser *)user conversation:(TL_conversation *)conversation sender:(id)sender {
-    if(user == nil)
-        return ELog(@"User nil");
-    
-    [[Telegram rightViewController] showUserInfoPage:user conversation:conversation];
-    [[[Telegram mainViewController].view window] makeFirstResponder:nil];
-}
 
 - (void)onAuthSuccess {
+    //[[NSUserDefaults standardUserDefaults] setBool:YES forKey:kPullPinnedOnce];
     [[MTNetwork instance] successAuthForDatacenter:[[MTNetwork instance] currentDatacenter]];
     [[Telegram delegate] initializeMainWindow];
     [[MTNetwork instance].updateService update];
@@ -249,7 +289,7 @@ int maxBroadcastUsers() {
 
 BOOL isTestServer() {
     BOOL result = [[NSProcessInfo processInfo].environment[@"test_server"] boolValue];
-    return result;
+    return result || [[NSUserDefaults standardUserDefaults] boolForKey:@"test-backend"];
 }
 
 NSString * appName() {
@@ -298,6 +338,10 @@ static TGEnterPasswordPanel *panel;
 
 +(BOOL)isSingleLayout {
     return [[Telegram mainViewController] isSingleLayout];
+}
+
++(BOOL)isTripleLayout {
+    return [[Telegram mainViewController] isTripleLayout];
 }
 
 
@@ -350,12 +394,12 @@ static TGEnterPasswordPanel *panel;
     
     dispatch_block_t performBlock = ^ {
         
-        [[Telegram rightViewController] showByDialog:user.dialog sender:self];
+        [appWindow().navigationController showMessagesViewController:user.dialog];
         
         NSArray *files = TGGetLogFilePaths();
         
         [files enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-            [[Telegram rightViewController].messagesViewController sendDocument:obj forConversation:user.dialog];
+            [appWindow().navigationController.messagesViewController sendDocument:obj forConversation:user.dialog];
         }];
         
     };
@@ -370,7 +414,9 @@ static TGEnterPasswordPanel *panel;
             
             if(response.users.count == 1) {
                 
-                [[UsersManager sharedManager] add:response.users withCustomKey:@"n_id" update:YES];
+                [[[UsersManager sharedManager] add:response.users autoStart:NO] startWithNext:^(id next) {
+                    [[Storage manager] insertUsers:next];
+                }];
                 
                 user = response.users[0];
                 
@@ -383,6 +429,23 @@ static TGEnterPasswordPanel *panel;
             [TMViewController hideModalProgress];
         }];
     }
+}
+
++(id)findObjectWithName:(NSString *)name {
+    
+    NSString *inchatprefix = @"chat://openprofile/?peer_class=TL_peerUser&peer_id=";
+    
+    if([name hasPrefix:inchatprefix]) {
+        return [[UsersManager sharedManager] find:[[name substringFromIndex:inchatprefix.length] intValue]];
+    }
+    
+    id obj = [UsersManager findUserByName:name];
+    
+    if(!obj)
+        obj = [ChatsManager findChatByName:name];
+    
+    return obj;
+    
 }
 
 +(void)initializeDatabase {

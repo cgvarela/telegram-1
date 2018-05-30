@@ -105,7 +105,7 @@
         
        
         
-        [self.nameField setFont:[NSFont fontWithName:@"HelveticaNeue" size:15]];
+        [self.nameField setFont:TGSystemFont(15)];
         
         [self.nameField setAlignment:NSCenterTextAlignment];
         
@@ -124,7 +124,7 @@
         self.textView = [[TMTextField alloc] initWithFrame:NSMakeRect(90, 45, NSWidth(frameRect) - 110, 23)];
         
         
-        [self.textView setFont:[NSFont fontWithName:@"HelveticaNeue" size:15]];
+        [self.textView setFont:TGSystemFont(15)];
         
         [self.textView setEditable:YES];
         [self.textView setBordered:NO];
@@ -139,7 +139,7 @@
         
         [str appendString:NSLocalizedString(@"Compose.GroupNamePlaceHolder", nil) withColor:DARK_GRAY];
         [str setAlignment:NSLeftTextAlignment range:str.range];
-        [str setFont:[NSFont fontWithName:@"HelveticaNeue" size:15] forRange:str.range];
+        [str setFont:TGSystemFont(15) forRange:str.range];
         
         [self.textView.cell setPlaceholderAttributedString:str];
         [self.textView setPlaceholderPoint:NSMakePoint(2, 0)];
@@ -154,7 +154,7 @@
         
         [self addSubview:self.textView];
         
-        self.chat = [TL_chat createWithN_id:-1 title:@"" photo:[TL_chatPhotoEmpty create] participants_count:0 date:0 left:NO version:1];
+        self.chat = [TL_chat createWithFlags:0 n_id:-1 title:@"" photo:[TL_chatPhotoEmpty create] participants_count:0 date:0 version:0 migrated_to:nil];
         
         
     }
@@ -175,6 +175,9 @@
     self.chat.title = self.textView.stringValue;
    
     NSString *holder = self.textView.stringValue.length > 0 ? [self.textView.stringValue substringToIndex:1] : [[self.textView.cell placeholderAttributedString].string substringToIndex:1];
+    
+    holder = [holder uppercaseString];
+    
     [self.nameField setStringValue:holder];
     [self.nameField sizeToFit];
     
@@ -187,6 +190,14 @@
     [self.controller updateCompose];
 }
 
+
+-(void)setFrameSize:(NSSize)newSize {
+    [super setFrameSize:newSize];
+    
+    [self.nameField setFrameOrigin:NSMakePoint(0, NSHeight(self.nameField.frame) - 5)];
+    
+    [self.textView setFrame:NSMakeRect(90, 45, newSize.width - 110, 23)];
+}
 
 -(void)drawRect:(NSRect)dirtyRect {
     [super drawRect:dirtyRect];
@@ -290,8 +301,7 @@
 
     [self setCenterBarViewTextAttributed:self.action.behavior.centerTitle];
     
-    
-    
+    [self.view.window makeFirstResponder:self.headerView.textView];
     
     [self.doneButton setStringValue:self.action.behavior.doneTitle];
     
@@ -303,8 +313,11 @@
     
     NSMutableArray *array = [[NSMutableArray alloc] init];
     
-    for (SelectUserItem *item in self.action.result.multiObjects) {
-        [array addObject:[item copy]];
+    for (TLUser *item in self.action.result.multiObjects) {
+        
+        SelectUserItem *selectItem = [[SelectUserItem alloc] initWithObject:item];
+        if(selectItem)
+            [array addObject:selectItem];
     }
     
     [self.tableView removeAllItems:NO];

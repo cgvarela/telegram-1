@@ -10,11 +10,15 @@
 #import "ComposeActionGroupBehavior.h"
 #import "ComposeActionSecretChatBehavior.h"
 #import "ComposeActionBroadcastBehavior.h"
-
+#import "TGRecentSearchTableView.h"
+#import "ComposeActionCreateChannelBehavior.h"
+#import "ComposeActionCreateMegaGroupBehavior.h"
+#import "TGModernSearchvViewController.h"
 @interface StandartViewController ()<TMSearchTextFieldDelegate>
 @property (nonatomic, strong) BTRButton *topButton;
 @property (nonatomic, strong) TMSearchTextField *searchTextField;
 @property (nonatomic,strong) TMMenuPopover *menuPopover;
+@property (nonatomic,strong) TGRecentSearchTableView *recentTableView;
 @end
 
 @interface ExtendView : TMView
@@ -30,29 +34,36 @@
     
 }
 
+-(BOOL)becomeFirstResponder {
+    return [super becomeFirstResponder];
+}
+
 -(void)setFrameSize:(NSSize)newSize {
     
     
     
     [super setFrameSize:newSize];
     
-    [self.controller.searchTextField setFrameSize:NSMakeSize(self.frame.size.width-70, 31)];
-        
-    [self.controller.topButton setFrameOrigin:NSMakePoint(self.frame.size.width == 70 ? 15 : (self.controller.searchTextField.frame.origin.y + self.controller.searchTextField.frame.size.width+11), 9)];
-    
+
+    [self.controller.searchTextField setHidden:newSize.width == 70];
     TMView *topView = self.subviews[0];
     
-    
+    [self.controller.searchTextField setFrameSize:NSMakeSize(NSWidth(self.frame) - 74, 31)];
     
     [topView setFrame:NSMakeRect(0, self.bounds.size.height - 48, self.bounds.size.width , 48)];
   
     
      if(newSize.width == 70)
     {
-        [self.controller.topButton setFrameOrigin:NSMakePoint(15, NSMinY(self.controller.topButton.frame))];
-    } else if(NSWidth(self.controller.view.frame) == 200) {
-        [self.controller.topButton setFrameOrigin:NSMakePoint(self.controller.searchTextField.frame.origin.y + self.controller.searchTextField.frame.size.width+11, NSMinY(self.controller.topButton.frame))];
+        [self.controller.topButton setCenterByView:self.controller.topButton.superview];
+    } else if(NSWidth(self.controller.view.frame) > 70) {
+        
+
+        int x = NSMaxX(_controller.searchTextField.frame) + roundf((NSWidth(topView.frame) - NSMaxX(_controller.searchTextField.frame) - NSWidth(_controller.topButton.frame))/2.0f);
+        [self.controller.topButton setFrameOrigin:NSMakePoint(x, NSMinY(self.controller.topButton.frame))];
     }
+    
+
 
 }
 
@@ -64,7 +75,7 @@
 
 -(void)loadView {
     
-    ExtendView *exView = [[ExtendView alloc] initWithFrame: self.frameInit];
+   ExtendView *exView = [[ExtendView alloc] initWithFrame: self.frameInit];
     
     
     self.view = exView;
@@ -94,39 +105,41 @@
     [self.view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
     
     
-    self.searchTextField = [[TMSearchTextField alloc] initWithFrame:NSMakeRect(10, 8 , 205, 29)];
+    self.searchTextField = [[TMSearchTextField alloc] initWithFrame:NSMakeRect(10, 8 , NSWidth(topView.frame) - 74, 31)];
     
-    
+    [self.searchTextField setCenteredYByView:topView];
     
     
      self.searchTextField.delegate = self;
     [self.searchTextField setAutoresizingMask:NSViewWidthSizable];
     [topView addSubview:self.searchTextField];
     
-    int buttonX = self.view.frame.size.width == 70 ? 15 : (self.searchTextField.frame.origin.y + self.searchTextField.frame.size.width+11);
-    
-    
     NSImage *compose = [NSImage imageNamed:@"ComposeNewMsg"];
     NSImage *composeActive = [NSImage imageNamed:@"ComposeNewMsgActive"];
     
-    self.topButton = [[BTRButton alloc] initWithFrame:NSMakeRect(buttonX, 9, 38, 29)];
     
-    [self.topButton setBackgroundImage:compose forControlState:BTRControlStateNormal];
-    [self.topButton setBackgroundImage:composeActive forControlState:BTRControlStateSelected];
-    [self.topButton setBackgroundImage:composeActive forControlState:BTRControlStateSelected | BTRControlStateHover];
-    [self.topButton setBackgroundImage:composeActive forControlState:BTRControlStateHighlighted];
-    [self.topButton setFrameSize:compose.size];
+    int buttonX = self.view.frame.size.width == 70 ? 22 : NSMaxX(_searchTextField.frame) + roundf((NSWidth(topView.frame) - NSMaxX(_searchTextField.frame) - compose.size.width)/2.0f);
     
+    
+    self.topButton = [[BTRButton alloc] initWithFrame:NSMakeRect(buttonX, 9, 38, 30)];
+
+    
+    [self.topButton setImage:compose forControlState:BTRControlStateNormal];
+    [self.topButton setImage:composeActive forControlState:BTRControlStateSelected];
+    [self.topButton setImage:composeActive forControlState:BTRControlStateSelected | BTRControlStateHover];
+    [self.topButton setImage:composeActive forControlState:BTRControlStateHighlighted];
+    
+    [_topButton setCenteredYByView:topView];
     
     [self.topButton setAutoresizingMask:NSViewMinXMargin];
     
     [topView addSubview:self.topButton];
     
-    weakify();
+    weak();
     
     
     [self.topButton addBlock:^(BTRControlEvents events) {
-        [strongSelf showComposeMenu];
+        [weakSelf showComposeMenu];
         
     } forControlEvents:BTRControlEventClick];
     
@@ -138,15 +151,16 @@
         [self.menuPopover setHoverView:self.topButton];
     }
     
-    _searchViewController = [[SearchViewController alloc] initWithFrame:self.view.bounds];
+    _searchViewController = [[TGModernSearchvViewController alloc] initWithFrame:self.view.bounds];
     
     self.searchView = _searchViewController.view;
     
+    
+    _recentTableView = [[TGRecentSearchTableView alloc] initWithFrame:self.view.bounds];
+    
+    
 }
 
--(BOOL)becomeFirstResponder {
-    return [self.searchTextField becomeFirstResponder];
-}
 
 -(void)showComposeMenu {
     
@@ -154,11 +168,11 @@
    
     if(!self.menuPopover.isShown) {
         NSRect rect = self.topButton.bounds;
-        weakify();
+        weak();
         
         
         [self.menuPopover setDidCloseBlock:^(TMMenuPopover *popover) {
-            [strongSelf.topButton setSelected:NO];
+            [weakSelf.topButton setSelected:NO];
         }];
         [self.menuPopover showRelativeToRect:rect ofView:self.topButton preferredEdge:CGRectMinYEdge];
     }
@@ -167,6 +181,7 @@
 
 +(NSMenu *)attachMenu {
     NSMenu *theMenu = [[NSMenu alloc] init];
+    
     
     NSMenuItem *createGropup = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"ComposeMenu.CreateGroup", nil) withBlock:^(id sender) {
         
@@ -186,25 +201,6 @@
     
     
     
-    NSMenuItem *broadcast = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"ComposeMenu.Broadcast", nil) withBlock:^(id sender) {
-        ComposeAction *action = [[ComposeAction alloc] initWithBehaviorClass:[ComposeActionBroadcastBehavior class]];
-        
-        if([[BroadcastManager sharedManager] all].count == 0) {
-             [[Telegram rightViewController] showComposeWithAction:action];
-        } else {
-             [[Telegram rightViewController] showComposeBroadcastList:action];
-        }
-        
-       [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
-        
-    }];
-
-    [broadcast setImage:[NSImage imageNamed:@"ComposeMenuNewBroadcast"]];
-    [broadcast setHighlightedImage:[NSImage imageNamed:@"ComposeMenuNewBroadcastActive"]];
-    [theMenu addItem:broadcast];
-    
-   
-    
     NSMenuItem *secretChat = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"ComposeMenu.SecretChat", nil) withBlock:^(id sender) {
         
         ComposeAction *action = [[ComposeAction alloc] initWithBehaviorClass:[ComposeActionSecretChatBehavior class]];
@@ -221,12 +217,30 @@
     
     [theMenu addItem:secretChat];
     
+    NSMenuItem *createChannel = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"ComposeMenu.CreateChannel", nil) withBlock:^(id sender) {
+        
+        
+        ComposeAction *action = [[ComposeAction alloc] initWithBehaviorClass:[ComposeActionCreateChannelBehavior class]];
+        
+        [[Telegram rightViewController] showComposeCreateChannel:action];
+        
+        [[NSApplication sharedApplication] activateIgnoringOtherApps:YES];
+        
+    }];
+    
+    [createChannel setImage:[NSImage imageNamed:@"ComposeMenuNewBroadcast"]];
+    [createChannel setHighlightedImage:[NSImage imageNamed:@"ComposeMenuNewBroadcastActive"]];
+    [theMenu addItem:createChannel];
+
+    
     return theMenu;
 }
 
-- (void) searchFieldBlur {}
-- (void) searchFieldFocus {}
-
+- (void)searchFieldDidEnter {
+    if(self.searchView.superview != nil && !self.searchView.isHidden) {
+        [_searchViewController selectFirst];
+    }
+}
 
 -(BOOL)isSearchActive {
     return self.searchView.superview != nil;
@@ -238,23 +252,123 @@
     
     [self hideSearch:!hidden];
     
-    [self.searchViewController searchByString:searchString ? searchString : @""];
-    
+    [self.searchViewController search:searchString ? searchString : @""];
     
 }
 
 -(void)searchByString:(NSString *)searchString {
+    
     [self.searchTextField setStringValue:searchString];
+    
+    if(searchString.length > 0) {
+        [self.searchTextField becomeFirstResponder];
+    } else {
+        [self.searchTextField resignFirstResponder];
+    }
 }
 
+-(BOOL)becomeFirstResponder {
+    return [super becomeFirstResponder];
+}
+
+-(void)becomeFirstResponder:(BOOL)force {
+    if(force) {
+        [_searchTextField becomeFirstResponder];
+    } else {
+        [super becomeFirstResponder];
+    }
+}
+
+-(void)hideSearchViewControllerWithConversationUsed:(TL_conversation*)conversation {
+    
+    
+    
+    if(self.searchViewController.selectedPeerId != conversation.peer_id)
+        return;
+    
+    [self searchByString:@""];
+    
+    
+    
+    [[Storage yap] asyncReadWriteWithBlock:^(YapDatabaseReadWriteTransaction * __nonnull transaction) {
+        
+        NSMutableArray *peerIds = [transaction objectForKey:@"peerIds" inCollection:RECENT_SEARCH];
+        
+        if(!peerIds)
+        {
+            peerIds = [[NSMutableArray alloc] init];
+        }
+        
+        [peerIds removeObject:@(conversation.peer_id)];
+        
+        [peerIds insertObject:@(conversation.peer_id) atIndex:0];
+        
+        [transaction setObject:peerIds forKey:@"peerIds" inCollection:RECENT_SEARCH];
+        
+    }];
+    
+    
+}
+
+-(BOOL)showRecentSearchItems {
+    
+    
+    BOOL canShow = [self.recentTableView loadRecentSearchItems:YES];
+    
+    if(canShow) {
+        [self.mainView removeFromSuperview];
+        [self.searchView removeFromSuperview];
+        
+        NSRect tableRect = NSMakeRect(0, 0, NSWidth(self.view.frame), NSHeight(self.view.frame) - 48);
+        
+        [self.recentTableView.containerView setFrame:tableRect];
+        
+        [self.view addSubview:self.recentTableView.containerView];
+        
+    }
+    
+    return canShow;
+}
+
+-(void)hideRecentSearchItems {
+    [self hideSearch:self.searchTextField.stringValue.length == 0];
+}
+
+-(void)searchFieldFocus {
+    if(self.searchTextField.stringValue.length == 0 && [self.searchTextField isFirstResponder])
+        [self showRecentSearchItems];
+}
+
+-(void)searchFieldBlur {
+    [self hideRecentSearchItems];
+}
+
+-(void)searchFieldDidResign {
+    [self hideRecentSearchItems];
+}
+
+-(BOOL)resignFirstResponder {
+    
+    [self.searchTextField endEditing];
+    [self.searchTextField setStringValue:@""];
+    [self.searchTextField resignFirstResponder];
+    return YES;
+}
 
 -(void)hideSearch:(BOOL)hide {
+    
+    if(hide && [self.searchTextField isFirstResponder]) {
+        if([self showRecentSearchItems])
+            return;
+    }
    
     NSRect tableRect = NSMakeRect(0, 0, NSWidth(self.view.frame), NSHeight(self.view.frame) - 48);
     
     
     [self.searchView setFrame:tableRect];
     [self.mainView setFrame:tableRect];
+    
+    [self.recentTableView.containerView removeFromSuperview];
     
     if(hide) {
         [self.searchView removeFromSuperview];

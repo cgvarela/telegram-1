@@ -37,6 +37,10 @@
     return self;
 }
 
+-(NSImage *)image {
+    return _imageView.image;
+}
+
 - (void)drawRect:(NSRect)dirtyRect {
     [super drawRect:dirtyRect];
     
@@ -50,9 +54,95 @@
     // Drawing code here.
 }
 
+-(void)rightMouseDown:(NSEvent *)theEvent {
+    [NSMenu popUpContextMenu:[self menuForEvent:theEvent] withEvent:theEvent forView:self];
+}
+
+-(NSMenu *)menuForEvent:(NSEvent *)event {
+    return [self contextMenu];
+}
+
+- (NSMenu *)contextMenu {
+    
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Context"];
+    
+    [self.defaultMenuItems enumerateObjectsUsingBlock:^(NSMenuItem *item, NSUInteger idx, BOOL *stop) {
+        [menu addItem:item];
+    }];
+    
+    return menu;
+}
+
+-(NSArray *)defaultMenuItems {
+    
+    
+    NSMutableArray *items = [[NSMutableArray alloc] init];
+    
+    
+    weak();
+    
+
+    if(self.item.document.message.conversation.type != DialogTypeSecretChat) {
+        [items addObject:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.Forward", nil) withBlock:^(id sender) {
+            
+            [appWindow().navigationController.messagesViewController setState:MessagesViewControllerStateNone];
+            [appWindow().navigationController.messagesViewController unSelectAll:NO];
+            [appWindow().navigationController.messagesViewController setSelectedMessage:weakSelf.item.document selected:YES];
+            [appWindow().navigationController.messagesViewController showForwardMessagesModalView];
+            
+            
+            [appWindow() makeKeyAndOrderFront:self.window];
+            
+        }]];
+    }
+    
+    if([MessagesViewController canDeleteMessages:@[self.item.document.message] inConversation:self.item.document.message.conversation]) {
+        [items addObject:[NSMenuItem menuItemWithTitle:NSLocalizedString(@"Context.Delete", nil) withBlock:^(id sender) {
+            
+            
+            [self.window makeKeyAndOrderFront:self];
+            
+            [appWindow().navigationController.messagesViewController setState:MessagesViewControllerStateNone];
+            [appWindow().navigationController.messagesViewController unSelectAll:NO];
+            [appWindow().navigationController.messagesViewController setSelectedMessage:weakSelf.item.document selected:YES];
+            [appWindow().navigationController.messagesViewController deleteSelectedMessages];
+            
+            
+            
+        }]];
+    }
+    
+    
+    NSMenuItem *gotoMessage = [NSMenuItem menuItemWithTitle:NSLocalizedString(@"PhotoViewer.Goto", nil) withBlock:^(id sender) {
+        
+        
+        [appWindow().navigationController showMessagesViewController:self.item.document.message.conversation withMessage:self.item.document.message];
+        [appWindow() makeKeyAndOrderFront:self.window];
+        
+    }];
+    
+    [items addObject:gotoMessage];
+    
+
+    
+    return items;
+    
+}
+
+-(TGAudioRowItem *)item {
+    return (TGAudioRowItem *)self.rowItem;
+}
+
+-(void)checkSelected:(BOOL)isSelected {
+    if(_imageView.image == self.imageView.object.placeholder) {
+        
+        TGAudioRowItem *item = (TGAudioRowItem *) [self rowItem];
+
+        _imageView.image = item.isSelected ? image_MusicStandartCover_Active() : self.imageView.object.placeholder;
+    }
+}
 
 -(void)redrawRow {
-    [super redrawRow];
     
     TGAudioRowItem *item = (TGAudioRowItem *) [self rowItem];
     
@@ -62,7 +152,6 @@
         [_imageView setFrameSize:item.imageObject.imageSize];
         
     } 
-    
     
     [_imageView setCenteredYByView:self];
     
@@ -79,10 +168,13 @@
     
     
     [_nameField setCenteredYByView:self];
-    
-    
+        
+    [super redrawRow];
+
     [self setNeedsDisplay:YES];
     
 }
+
+
 
 @end

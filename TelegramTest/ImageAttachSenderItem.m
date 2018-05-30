@@ -19,7 +19,7 @@
 @implementation ImageAttachSenderItem
 
 
--(id)initWithConversation:(TL_conversation *)conversation attachObject:(TGAttachObject *)attach {
+-(id)initWithConversation:(TL_conversation *)conversation attachObject:(TGAttachObject *)attach additionFlags:(int)additionFlags {
     
     if(self = [super initWithConversation:conversation]) {
         
@@ -38,15 +38,15 @@
         [sizes addObject:size];
         [sizes addObject:size1];
         
-        TL_messageMediaPhoto *photo = [TL_messageMediaPhoto createWithPhoto:[TL_photo createWithN_id:attach.unique_id access_hash:0 user_id:0 date:(int)[[MTNetwork instance] getTime] geo:[TL_geoPointEmpty create] sizes:sizes] caption:attach.caption];
+        TL_messageMediaPhoto *photo = [TL_messageMediaPhoto createWithPhoto:[TL_photo createWithFlags:0 n_id:attach.unique_id access_hash:0 date:(int)[[MTNetwork instance] getTime] sizes:sizes] caption:attach.caption];
         
         
         [TGCache cacheImage:attach.image forKey:size.location.cacheKey groups:@[IMGCACHE]];
         
-        self.message = [MessageSender createOutMessage:@"" media:photo conversation:conversation];
+        self.message = [MessageSender createOutMessage:@"" media:photo conversation:conversation additionFlags:additionFlags];
         
-       
-         [[NSFileManager defaultManager] copyItemAtPath:path toPath:mediaFilePath(self.message.media) error:nil];
+        if([[NSFileManager defaultManager] fileExistsAtPath:path])
+            [[NSFileManager defaultManager] copyItemAtPath:path toPath:mediaFilePath(self.message) error:nil];
         
         [self.message save:YES];
         
@@ -60,99 +60,101 @@
     
     _attach.uploader = nil;
     
-    self.filePath = mediaFilePath(self.message.media);
+    self.filePath = mediaFilePath(self.message);
     
     TLInputMedia *media;
     
     if([uploadedFile isKindOfClass:[TL_inputPhoto class]]) {
         media = [TL_inputMediaPhoto createWithN_id:uploadedFile caption:self.message.media.caption];
     } else {
-        media = [TL_inputMediaUploadedPhoto createWithFile:uploadedFile caption:self.message.media.caption];
+        media = [TL_inputMediaUploadedPhoto createWithFlags:0 file:uploadedFile caption:self.message.media.caption stickers:nil];
     }
     
-    id request = nil;
+    id request = [TLAPI_messages_sendMedia createWithFlags:[self senderFlags] peer:self.conversation.inputPeer reply_to_msg_id:self.message.reply_to_msg_id media:media random_id:self.message.randomId reply_markup:[TL_replyKeyboardMarkup createWithFlags:0 rows:[@[]mutableCopy]]] ;
+
     
-    if(self.conversation.type == DialogTypeBroadcast) {
-        request = [TLAPI_messages_sendBroadcast createWithContacts:[self.conversation.broadcast inputContacts] random_id:[self.conversation.broadcast generateRandomIds] message:@"" media:media];
-    } else {
-        request = [TLAPI_messages_sendMedia createWithFlags:self.message.reply_to_msg_id != 0 ? 1 : 0 peer:self.conversation.inputPeer reply_to_msg_id:self.message.reply_to_msg_id media:media random_id:self.message.randomId reply_markup:[TL_replyKeyboardMarkup createWithFlags:0 rows:[@[]mutableCopy]]] ;
-    }
+    weak();
     
     self.rpc_request = [RPCRequest sendRequest:request successHandler:^(RPCRequest *request, TLUpdates *response) {
         
+        strongWeak();
         
-        
-        
-        if(response.updates.count < 2)
-        {
-            [self cancel];
-            return;
-        }
-        
-        TL_localMessage *msg = [TL_localMessage convertReceivedMessage:(TLMessage *) ( [response.updates[1] message])];
-        
-        
-        [[Storage manager] setFileInfo:[TL_inputPhoto createWithN_id:msg.media.photo.n_id access_hash:msg.media.photo.access_hash] forPathHash:fileMD5(self.filePath)];
-        
-        if(self.conversation.type != DialogTypeBroadcast)  {
-            self.message.n_id = msg.n_id;
-            self.message.date = msg.date;
+        if(strongSelf != nil) {
+            [strongSelf updateMessageId:response];
             
-        }
-        
-        TLPhotoSize *newSize = [msg.media.photo.sizes lastObject];
-        
-        if(self.message.media.photo.sizes.count > 1) {
-            TL_photoSize *size =self.message.media.photo.sizes[1];
-            [TGCache changeKey:size.location.cacheKey withKey:newSize.location.cacheKey];
-            size.location = newSize.location;
+            TL_localMessage *msg = [TL_localMessage convertReceivedMessage:[[strongSelf updateNewMessageWithUpdates:response] message]];
             
-        } else {
-            ((TL_localMessage *)self.message).media = msg.media;
-        }
-        
-        // fix file location for download image after clearing cache.
-        {
-            MessageTableItemPhoto *item = (MessageTableItemPhoto *)self.tableItem;
+            if(msg == nil)
+            {
+                [strongSelf cancel];
+                return;
+            }
             
-            item.imageObject.location = newSize.location;
+            
+            [[Storage manager] setFileInfo:[TL_inputPhoto createWithN_id:msg.media.photo.n_id access_hash:msg.media.photo.access_hash] forPathHash:fileMD5(strongSelf.filePath)];
+            
+            if(strongSelf.conversation.type != DialogTypeBroadcast)  {
+                strongSelf.message.n_id = msg.n_id;
+                strongSelf.message.date = msg.date;
+                
+            }
+            
+            TLPhotoSize *newSize = [msg.media.photo.sizes lastObject];
+            
+            if(strongSelf.message.media.photo.sizes.count > 1) {
+                TL_photoSize *size =strongSelf.message.media.photo.sizes[1];
+                [TGCache changeKey:size.location.cacheKey withKey:newSize.location.cacheKey];
+                size.location = newSize.location;
+                
+            } else {
+                ((TL_localMessage *)strongSelf.message).media = msg.media;
+            }
+            
+            // fix file location for download image after clearing cache.
+            {
+//                MessageTableItemPhoto *item = (MessageTableItemPhoto *)strongSelf.tableItem;
+//                
+//                item.imageObject.location = newSize.location;
+            }
+            
+            strongSelf.message.dstate = DeliveryStateNormal;
+            
+            [strongSelf.message save:YES];
+            
+            [[NSFileManager defaultManager] moveItemAtPath:strongSelf.filePath toPath:mediaFilePath(strongSelf.message) error:nil];
+            
+            
+            [[NSFileManager defaultManager] removeItemAtPath:_attach.generatedPath error:nil];
+            
+            
+            PreviewObject *previewObject = [[PreviewObject alloc] initWithMsdId:strongSelf.message.n_id media:strongSelf.message peer_id:strongSelf.message.peer_id];
+            
+            [Notification perform:MEDIA_RECEIVE data:@{KEY_PREVIEW_OBJECT:previewObject}];
+            
+            
+            strongSelf.state = MessageSendingStateSent;
         }
         
-        self.message.dstate = DeliveryStateNormal;
         
-        [self.message save:YES];
-        
-        [[Storage manager] insertMedia:self.message];
-        
-        [[NSFileManager defaultManager] moveItemAtPath:self.filePath toPath:mediaFilePath(self.message.media) error:nil];
-        
-        
-        [[NSFileManager defaultManager] removeItemAtPath:_attach.generatedPath error:nil];
-        
-        
-        PreviewObject *previewObject = [[PreviewObject alloc] initWithMsdId:self.message.n_id media:self.message peer_id:self.message.peer_id];
-        
-        [Notification perform:MEDIA_RECEIVE data:@{KEY_PREVIEW_OBJECT:previewObject}];
-        
-        
-        self.state = MessageSendingStateSent;
         
     } errorHandler:^(RPCRequest *request, RpcError *error) {
         
-        _attach.uploader = nil;
         
-        if([self checkErrorAndReUploadFile:error path:_attach.generatedPath])
+        
+        weakSelf.attach.uploader = nil;
+        
+        if([weakSelf checkErrorAndReUploadFile:error path:weakSelf.attach.generatedPath])
             return;
         
-        self.state = MessageSendingStateError;
-    } timeout:0 queue:[ASQueue globalQueue].nativeQueue];
+        weakSelf.state = MessageSendingStateError;
+    } timeout:0 queue:[ASQueue globalQueue]._dispatch_queue];
 }
 
 
 -(void)performRequest {
     
     
-    weakify();
+    weak();
     
     self.progress = 0;
     
@@ -162,16 +164,17 @@
     }
     
     
+    
     [_attach.uploader setUploadProgress:^(UploadOperation *operation, NSUInteger current, NSUInteger total) {
-        strongSelf.progress = ((float)current/(float)total) * 100.0f;
+        weakSelf.progress = ((float)current/(float)total) * 100.0f;
     }];
     
     [_attach.uploader setUploadTypingNeed:^(UploadOperation *operation) {
-        [TGSendTypingManager addAction:[TL_sendMessageUploadPhotoAction createWithProgress:strongSelf.progress] forConversation:strongSelf.conversation];
+        [TGSendTypingManager addAction:[TL_sendMessageUploadPhotoAction createWithProgress:weakSelf.progress] forConversation:weakSelf.conversation];
     }];
     
     [_attach.uploader setUploadStarted:^(UploadOperation *operation, NSData *data) {
-        [TGSendTypingManager addAction:[TL_sendMessageUploadPhotoAction createWithProgress:strongSelf.progress] forConversation:strongSelf.conversation];
+        [TGSendTypingManager addAction:[TL_sendMessageUploadPhotoAction createWithProgress:weakSelf.progress] forConversation:weakSelf.conversation];
     }];
     
     
@@ -183,7 +186,7 @@
         
         [_attach.uploader setUploadComplete:^(UploadOperation *operation, id input) {
             
-            [strongSelf didEndUploading:input];
+            [weakSelf didEndUploading:input];
             
         }];
         

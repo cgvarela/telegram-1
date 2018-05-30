@@ -48,7 +48,7 @@
     if (self) {
         self->min = 0;
         self->max = 100;
-        self->duration = 0.1;
+        self->duration = 0.2;
         self->fps = 60;
         self->reversed = NO;
         self.currentProgress = 0;
@@ -63,10 +63,10 @@
         
        // [self.cancelView setCenterByView:self];
 
-        weakify();
+        weak();
         [self.cancelView addBlock:^(BTRControlEvents events) {
-            if(strongSelf.cancelCallback) {
-                strongSelf.cancelCallback();
+            if(weakSelf.cancelCallback) {
+                weakSelf.cancelCallback();
             }
         } forControlEvents:BTRControlEventMouseDownInside];
         
@@ -83,7 +83,7 @@
         self.progressColor = NSColorFromRGB(0xffffff);
     } else {
         
-        self.progressColor = NSColorFromRGB(0xa0a0a0);
+        self.progressColor = NSColorFromRGB(0xffffff); // NSColorFromRGB(0xa0a0a0);
     }
     
     [self setNeedsDisplay:YES];
@@ -122,16 +122,34 @@ float ease(float t, float b, float c, float d) {
     return c*(t*t*t + 1) + b;
 };
 
+-(int)topPadding {
+    return 4;
+}
 
 - (void)drawRect:(NSRect)dirtyRect
 {
-    if(self.isHidden)
+    
+    if(self.backgroundColor) {
+        [self.backgroundColor set];
+        NSBezierPath *p = [NSBezierPath bezierPathWithOvalInRect:NSMakeRect(0, 0, NSWidth(dirtyRect), NSHeight(dirtyRect))];
+        [p fill];
+    }
+    
+    if(self.isHidden || self.window == nil) {
+        [self pop_removeAllAnimations];
+        [_timer invalidate];
+        _timer = nil;
         return;
+    }
+    
     
 	[super drawRect:dirtyRect];
     
+    if(self.currentProgress == 0.0f)
+        return;
     
-    const int topPadding = 1;
+    
+    int topPadding = self.topPadding;
     
     int radius = roundf(self.frame.size.width / 2 - topPadding);
     
@@ -162,8 +180,8 @@ float ease(float t, float b, float c, float d) {
     
     [self.progressColor setStroke];
     
-    [path setLineWidth:2];
-    
+    [path setLineWidth:2.5];
+    [path setLineCapStyle:NSRoundLineCapStyle];
     
     NSAffineTransform * transform = [NSAffineTransform transform];
     [transform translateXBy: center.x yBy: center.y];
@@ -257,11 +275,13 @@ float ease(float t, float b, float c, float d) {
     }];
     
     
+    animation.repeatForever = NO;
+    
     animation.fromValue = @(_currentAcceptProgress);
     
     animation.toValue = @(_currentProgress);
     
-    animation.duration = 0.2;
+    animation.duration = self->duration;
     
     animation.removedOnCompletion = YES;
     
@@ -270,7 +290,7 @@ float ease(float t, float b, float c, float d) {
     
     
     
-    if(![self pop_animationForKey:@"rotate"]) {
+    if(![self pop_animationForKey:@"rotate"] && !_disableRotating) {
 
         
         
@@ -297,57 +317,28 @@ float ease(float t, float b, float c, float d) {
         }];
         
         
-        rotate.fromValue = @(0);
+        rotate.fromValue = @(self->rotateAngel);
         
         rotate.toValue = @(360);
         
         rotate.duration = 2;
         
         
+        rotate.removedOnCompletion = YES;
         rotate.repeatForever = YES;
-        
         [self pop_addAnimation:rotate forKey:@"rotate"];
     }
     
     
-   
-    
-    
-    
-//    if(!self.timer) {
-//        self.timer = [[TGTimer alloc] initWithTimeout:1.f/fps repeat:YES completion:^{
-//
-//            if(_currentAcceptProgress < _currentProgress) {
-//                float summ =  (_currentProgress - _currentAcceptProgress)/(fps*duration);
-//                if(summ < step)
-//                    summ = step;
-//                _currentAcceptProgress+= summ;
-//                
-//            }
-//            
-//            if(_currentAcceptProgress == max) {
-//                _currentAcceptProgress = min;
-//            }
-//            
-//            rotateAngel+= 360/fps;
-//            
-//            if(rotateAngel > 360)
-//                rotateAngel = 0;
-//            
-//            [LoopingUtils runOnMainQueueAsync:^{
-//                [self setNeedsDisplay:YES];
-//            }];
-//            
-//        } queue:[[ASQueue globalQueue] nativeQueue]];
-//        
-//        [self.timer start];
-//    }
-    
+
     
 }
 
 
 -(void)setHidden:(BOOL)flag {
+    
+    BOOL updateRotate = self.isHidden != flag;
+    
     [super setHidden:flag];
     if(flag) {
         [self.timer invalidate];
@@ -355,7 +346,9 @@ float ease(float t, float b, float c, float d) {
         [self pop_removeAllAnimations];
     }
     
-    rotateAngel = 0;
+    if(updateRotate) {
+         rotateAngel = 0;
+    }
 }
 
 

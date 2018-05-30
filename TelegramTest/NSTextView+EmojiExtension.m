@@ -7,26 +7,28 @@
 //
 
 #import "NSTextView+EmojiExtension.h"
-#import "EmojiViewController.h"
 #import "RBLPopover.h"
 #import "TGMentionPopup.h"
+#import "TGModernESGViewController.h"
+#import "TGPopoverHint.h"
 @implementation NSTextView (EmojiExtension)
 
 
 DYNAMIC_PROPERTY(EmojiPopover)
 
+
 -(void)showEmoji {
-    EmojiViewController *emojiViewController = [EmojiViewController instance];
+    TGModernESGViewController *emojiViewController = [TGModernESGViewController controller];
     
-    
+    [emojiViewController setMessagesViewController:nil];
     
     RBLPopover *popover = [self getEmojiPopover];
     
     if(!popover) {
-        popover = [[RBLPopover alloc] initWithContentViewController:emojiViewController];
+        popover = [[RBLPopover alloc] initWithContentViewController:(NSViewController *)emojiViewController];
     }
     
-    [emojiViewController setInsertEmoji:^(NSString *emoji) {
+    [emojiViewController.emojiViewController setInsertEmoji:^(NSString *emoji) {
         [self insertText:emoji];
     }];
     
@@ -44,12 +46,54 @@ DYNAMIC_PROPERTY(EmojiPopover)
 
     if(!popover.isShown) {
         [popover showRelativeToRect:rect ofView:self.window.contentView preferredEdge:CGRectMinYEdge];
-        [[EmojiViewController instance] showPopovers];
+        [emojiViewController show];
     }
 
 }
 
+-(void)tryShowHintView:(TL_conversation *)conversation {
+    NSRect rect = [self firstRectForCharacterRange:[self selectedRange]];
+    
+    NSRect textViewBounds = [self convertRectToBase:[self bounds]];
+    textViewBounds.origin = [[self window] convertBaseToScreen:textViewBounds.origin];
+    
+    rect.origin.x -= textViewBounds.origin.x;
+    rect.origin.y-= (textViewBounds.origin.y + 10);
+    
+    rect.origin.x += 144;
+    
+    
+    NSString *search = nil;
+    NSString *string = self.string;
+    NSRange selectedRange = self.selectedRange;
+    TGHintViewShowType type = [TGMessagesHintView needShowHint:string selectedRange:selectedRange completeString:&string searchString:&search];
+    
+    if(type == TGHintViewShowMentionType && search != nil && ![string hasPrefix:@" "]) {
+        
+        [TGPopoverHint close];
+        
+        [[TGPopoverHint hintView] showMentionPopupWithQuery:search conversation:conversation chat:conversation.chat allowInlineBot:NO allowUsernameless:NO choiceHandler:^(NSString *result,id object) {
+            [self insertText:[result stringByAppendingString:@" "] replacementRange:NSMakeRange(selectedRange.location - search.length, search.length)];
+            
+            [TGPopoverHint close];
+            
+            
+            [self setSelectedRange:NSMakeRange(self.string.length, 0)];
+            
+        }];
+        
+        
+        if(![TGPopoverHint hintView].isHidden) {
+            [TGPopoverHint showHintViewForView:self.window.contentView ofRect:rect];
+        } else {
+            
+        }
+        
+    } else {
+        [TGPopoverHint close];
+    }
 
+}
 
 
 

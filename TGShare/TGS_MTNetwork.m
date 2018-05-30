@@ -1,25 +1,26 @@
 
 #import "TGS_MTNetwork.h"
 
-#import <MTProtoKit/MTKeychain.h>
-#import <MTProtoKit/MTDatacenterAuthInfo.h>
-#import <MTProtoKit/MTProtoKit.h>
+#import <MtProtoKitMac/MTKeychain.h>
+#import <MtProtoKitMac/MTDatacenterAuthInfo.h>
+#import <MtProtoKitMac/MTProtoKitMac.h>
 #import "TGNetworkWorker.h"
 #import "RpcErrorParser.h"
 #import "DatacenterArchiver.h"
-#import <MTProtoKit/MTApiEnvironment.h>
+#import <MtProtoKitMac/MTApiEnvironment.h>
 #import "TGDatacenterWatchdogActor.h"
 #import "TGTimer.h"
-#import "TGKeychain.h"
+#import "TGSKeychain.h"
 #import "NSData+Extensions.h"
 #import "NSMutableData+Extension.h"
 
 #import "TGTLSerialization.h"
 #import "ASQueue.h"
-#import <MTProtoKit/MTLogging.h>
+#import <MtProtoKitMac/MTLogging.h>
 #import "TLApi.h"
 #import "CMath.h"
 #import "TGSAppManager.h"
+#import "TGSKeychain.h"
 @implementation MTRequest (LegacyTL)
 
 - (void)setBody:(TLApiObject *)body
@@ -65,7 +66,7 @@
     ASQueue *_queue;
     TGTimer *_globalTimer;
     NSMutableArray *_dispatchTimers;
-    TGKeychain *_keychain;
+    TGSKeychain *_keychain;
 }
 
 @end
@@ -105,7 +106,6 @@ static NSString *kDefaultDatacenter = @"default_dc";
         
         [_queue dispatchOnQueue:^{
             
-            [self moveAndEncryptKeychain];
             
             _objectiveDatacenter = [[NSMutableDictionary alloc] init];
             _pollConnections = [[NSMutableArray alloc] init];
@@ -192,45 +192,13 @@ static NSString *kDefaultDatacenter = @"default_dc";
 }
 
 
--(void)moveAndEncryptKeychain {
-    
-    NSString *applicationSupportPath = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES)[0];
-    NSString *applicationName = @"Telegram";
-    
-    NSString * odirectory = [[applicationSupportPath stringByAppendingPathComponent:applicationName] stringByAppendingPathComponent:@"mtkeychain"];
-    
-    
-    
-    BOOL isset = NO;
-    
-    if([[NSFileManager defaultManager] fileExistsAtPath:odirectory isDirectory:&isset]) {
-        
-        if(isset) {
-            
-            TGKeychain *keychain = [self nKeychain];
-            
-            [keychain setNotEncryptedKeychain:YES];
-            
-            [keychain loadIfNeeded];
-            
-            [keychain setNotEncryptedKeychain:NO];
-            
-            [keychain updatePasscodeHash:[[NSData alloc] initWithEmptyBytes:32] save:YES];
-            
-            [[NSFileManager defaultManager] removeItemAtPath:odirectory error:nil];
-            
-        }
-        
-    }
-    
-}
 
 -(MTQueue *)queue {
     return [_mtProto messageServiceQueue];
 }
 
--(TGKeychain *)nKeychain {
-    return [TGKeychain keychainWithName:@"ru.keepcoder.telegram"];
+-(TGSKeychain *)nKeychain {
+    return [TGSKeychain keychainWithName:@"ru.keepcoder.Telegram"];
 }
 
 
@@ -238,7 +206,7 @@ static NSString *kDefaultDatacenter = @"default_dc";
     
     [_queue dispatchOnQueue:^{
         
-        TGKeychain *keychain = (TGKeychain *)_keychain;
+        TGSKeychain *keychain = (TGSKeychain *)_keychain;
         
         [keychain updatePasscodeHash:md5Hash save:YES];
         
@@ -253,7 +221,7 @@ static NSString *kDefaultDatacenter = @"default_dc";
     
     [_queue dispatchOnQueue:^{
         
-        TGKeychain *keychain = (TGKeychain *)_keychain;
+        TGSKeychain *keychain = (TGSKeychain *)_keychain;
         
         result = [md5Hash isEqualToData:[keychain md5PasscodeHash]];
         
@@ -269,7 +237,7 @@ static NSString *kDefaultDatacenter = @"default_dc";
     
     [_queue dispatchOnQueue:^{
         
-        TGKeychain *keychain = (TGKeychain *)_keychain;
+        TGSKeychain *keychain = (TGSKeychain *)_keychain;
         
         result = [keychain passcodeIsEnabled];
         
@@ -280,7 +248,7 @@ static NSString *kDefaultDatacenter = @"default_dc";
     
 }
 
--(void)startWithKeychain:(TGKeychain *)keychain {
+-(void)startWithKeychain:(TGSKeychain *)keychain {
     
     [_context setKeychain:keychain];
     
@@ -295,10 +263,9 @@ static NSString *kDefaultDatacenter = @"default_dc";
     _datacenterCount = 5;
     
     
-    NSString *address = @"149.154.175.50";
+    NSString *address =  @"149.154.167.51";
     
-    [_context setSeedAddressSetForDatacenterWithId:1 seedAddressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[[[MTDatacenterAddress alloc] initWithIp:address port:443]]]];
-    
+    [_context setSeedAddressSetForDatacenterWithId:2 seedAddressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[[[MTDatacenterAddress alloc] initWithIp:address port:443 preferForMedia:NO restrictToTcp:NO]]]];
     
 }
 
@@ -334,14 +301,14 @@ static int MAX_WORKER_POLL = 5;
         NSMutableArray *poll = [[NSMutableArray alloc] init];
         
         for (int j = 0; j < MAX_WORKER_POLL; j++) {
-            TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:i masterDatacenterId:_mtProto.datacenterId];
+            TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:i masterDatacenterId:_mtProto.datacenterId queue:_queue];
             [poll addObject:worker];
         }
         [_objectiveDatacenter setObject:poll forKey:@(i)];
     }
     
     for (int i = 1; i < _datacenterCount+1; i++) {
-        TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:_mtProto.datacenterId masterDatacenterId:_mtProto.datacenterId];
+        TGNetworkWorker *worker = [[TGNetworkWorker alloc] initWithContext:_context datacenterId:_mtProto.datacenterId masterDatacenterId:_mtProto.datacenterId queue:_queue];
         [_pollConnections addObject:worker];
     }
 }
@@ -379,7 +346,7 @@ static int MAX_WORKER_POLL = 5;
     return [[_keychain objectForKey:@"user_id" group:@"persistent"] intValue];
 }
 
--(MTKeychain *)keyChain {
+-(id<MTKeychain>)keyChain {
     return _context.keychain;
 }
 
@@ -483,7 +450,7 @@ static int MAX_WORKER_POLL = 5;
         
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
-            noAuthClasses = @[[TLAPI_auth_sendCall class], [TLAPI_auth_signIn class], [TLAPI_auth_signUp class], [TLAPI_auth_sendCode class], [TLAPI_auth_checkPhone class], [TLAPI_help_getConfig class], [TLAPI_help_getNearestDc class], [TLAPI_auth_sendSms class], [TLAPI_account_deleteAccount class], [TLAPI_account_getPassword class], [TLAPI_auth_checkPassword class], [TLAPI_auth_requestPasswordRecovery class], [TLAPI_auth_recoverPassword class]];
+             noAuthClasses = @[[TLAPI_auth_resendCode class],[TLAPI_auth_signIn class], [TLAPI_auth_signUp class], [TLAPI_auth_sendCode class], [TLAPI_auth_checkPhone class], [TLAPI_help_getConfig class], [TLAPI_help_getNearestDc class], [TLAPI_account_deleteAccount class], [TLAPI_account_getPassword class], [TLAPI_auth_checkPassword class], [TLAPI_auth_requestPasswordRecovery class], [TLAPI_auth_recoverPassword class]];
         });
         
         if([self isAuth] || ([noAuthClasses containsObject:[request.object class]])) {
@@ -552,9 +519,7 @@ static int MAX_WORKER_POLL = 5;
 
 id dispatch_in_time(int time, dispatch_block_t callback) {
     
-    
-    assert(callback != nil);
-    
+        
     GlobalDispatchAction *action = [[GlobalDispatchAction alloc] init];
     
     action.time = time;

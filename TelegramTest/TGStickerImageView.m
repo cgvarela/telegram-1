@@ -17,10 +17,6 @@
 
 @implementation TGStickerImageView
 
--(void)drawLayer:(CALayer *)layer inContext:(CGContextRef)ctx {
-    [super drawLayer:layer inContext:ctx];
-}
-
 
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -56,6 +52,10 @@
 -(void)setSelected:(BOOL)selected {
     _selected = selected;
     [self setNeedsDisplay:YES];
+}
+
+-(NSImage *)cachedImage:(NSString *)key {
+    return [TGCache cachedImage:key group:@[STICKERSCACHE]];
 }
 
 -(void)updateTrackingAreas

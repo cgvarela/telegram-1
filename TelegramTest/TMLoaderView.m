@@ -7,7 +7,6 @@
 //
 
 #import "TMLoaderView.h"
-
 @interface TMLoaderView ()
 @property (nonatomic,weak) id target;
 @property (nonatomic,assign) SEL selector;
@@ -21,8 +20,11 @@
 
 - (void)drawRect:(NSRect)dirtyRect {
     
-    if(self.isHidden)
+    if(self.isHidden || !self.window) {
+        [self pop_removeAllAnimations];
         return;
+    }
+    
     
     
     if(self.style == TMCircularProgressDarkStyle) {
@@ -41,16 +43,61 @@
 -(id)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
         
+        self.backgroundColor = [NSColor clearColor];
+        
         self.wantsLayer = YES;
         self.imageView = [[NSImageView alloc] initWithFrame:self.bounds];
         
         self.stateImages = [[NSMutableDictionary alloc] init];
         [self addSubview:self.imageView];
+        
+        
+        
     }
     
     return self;
 }
 
+-(void)setHidden:(BOOL)hidden animated:(BOOL)animated {
+    
+    if(!hidden && [self.layer pop_animationForKey:@"opacity"]) {
+        [self.layer pop_removeAllAnimations];
+    }
+    
+    if(animated && hidden && !self.isHidden && ![self.layer pop_animationForKey:@"opacity"]) {
+        
+        float from = hidden ? 1.0f : 0.0f;
+        float to = hidden ? 0.0f : 1.0f;
+        
+        POPBasicAnimation *animation = [POPBasicAnimation animationWithPropertyNamed:kPOPLayerOpacity];
+        
+        animation.duration = 0.2;
+        animation.fromValue = @(from);
+        animation.toValue = @(to);
+        animation.removedOnCompletion = YES;
+        [self.layer pop_addAnimation:animation forKey:@"opacity"];
+        
+        [animation setCompletionBlock:^(POPAnimation *animation, BOOL complete) {
+            if(complete) {
+                [super setHidden:hidden];
+                [self setNeedsDisplay:YES];
+            }
+        }];
+        
+    } else {
+        self.layer.opacity = 1.0f;
+        [super setHidden:hidden];
+        
+        if(!self.isHidden)
+            [self setNeedsDisplay:YES];
+    }
+}
+
+-(void)setHidden:(BOOL)hidden {
+    [self setHidden:hidden animated:YES];
+    
+    
+}
 
 -(void)setImage:(NSImage *)image forState:(TMLoaderViewState)state {
     
@@ -108,11 +155,5 @@
 }
 
 
--(void)setHidden:(BOOL)flag {
-    [super setHidden:flag];
-    
-    if(!self.isHidden)
-        [self setNeedsDisplay:YES];
-}
 
 @end

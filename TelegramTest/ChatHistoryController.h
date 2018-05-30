@@ -11,19 +11,15 @@
 #import "SenderListener.h"
 
 #import "HistoryFilter.h"
+#import "TGHistoryResponse.h"
+
+
 
 @interface ChatHistoryController : NSObject<SenderListener>
 
 
-typedef enum {
-    ChatHistoryStateCache = 0,
-    ChatHistoryStateLocal = 1,
-    ChatHistoryStateRemote = 2,
-    ChatHistoryStateFull = 3
-} ChatHistoryState;
-
-@property (atomic,assign) ChatHistoryState nextState;
-@property (atomic,assign) ChatHistoryState prevState;
+-(ChatHistoryState)prevState;
+-(ChatHistoryState)nextState;
 
 //@property (nonatomic,strong,readonly) TL_conversation *conversation;
 @property (nonatomic,readonly) id<MessagesDelegate> controller;
@@ -31,52 +27,77 @@ typedef enum {
 
 -(BOOL)isProccessing;
 
-
 @property (nonatomic,assign) BOOL need_save_to_db;
 
-@property (nonatomic,assign) int max_id;
-@property (nonatomic,assign) int min_id;
-
-@property (nonatomic,assign) int start_min;
-
-
-@property (nonatomic,assign) int server_max_id;
-@property (nonatomic,assign) int server_min_id;
-
-@property (nonatomic,assign) int server_start_min;
-
-@property (nonatomic,assign) int minDate;
-@property (nonatomic,assign) int maxDate;
 
 @property (nonatomic,assign) NSUInteger selectLimit; // default = 70;
 
+-(void)prevStateAsync:(void (^)(ChatHistoryState state,ChatHistoryController *controller))block;
+-(void)nextStateAsync:(void (^)(ChatHistoryState state,ChatHistoryController *controller))block;
 
 
-
+-(HistoryFilter *)filterWithNext:(BOOL)next;
+-(HistoryFilter *)filterWithPeerId:(int)peer_id;
+-(HistoryFilter *)filterAtIndex:(int)index;
 -(HistoryFilter *)filter;
 -(void)setFilter:(HistoryFilter *)filter;
-
--(id)initWithController:(id<MessagesDelegate>)controller;
+-(void)addFilter:(HistoryFilter *)filter;
 -(id)initWithController:(id<MessagesDelegate>)controller historyFilter:(Class)historyFilter;
-typedef void (^selectHandler)(NSArray *result, NSRange range);
+
+typedef void (^selectHandler)(NSArray *result, NSRange range, id controller);
 
 -(void)request:(BOOL)next anotherSource:(BOOL)anotherSource sync:(BOOL)sync selectHandler:(selectHandler)selectHandler;
 
 
--(void)addItem:(MessageTableItem *)item;
+
+-(void)loadAroundMessagesWithMessage:(TL_localMessage *)msg prevLimit:(int)prevLimit nextLimit:(int)nextLimit selectHandler:(selectHandler)selectHandler;
+-(void)loadAroundMessagesWithSelectHandler:(selectHandler)selectHandler prevLimit:(int)prevLimit nextLimit:(int)nextLimit prevResult:(NSMutableArray *)prevResult nextResult:(NSMutableArray *)nextResult;
+
+
+
+
+
+
 -(void)addItems:(NSArray *)items conversation:(TL_conversation *)conversation;
 -(void)addItems:(NSArray *)items conversation:(TL_conversation *)conversation  sentControllerCallback:(dispatch_block_t)sentControllerCallback;
 -(void)addItem:(MessageTableItem *)item sentControllerCallback:(dispatch_block_t)sentControllerCallback;
-
 -(void)addItem:(MessageTableItem *)item conversation:(TL_conversation *)conversation callback:(dispatch_block_t)callback sentControllerCallback:(dispatch_block_t)sentControllerCallback;
 -(void)addItems:(NSArray *)items conversation:(TL_conversation *)conversation callback:(dispatch_block_t)callback sentControllerCallback:(dispatch_block_t)sentControllerCallback;
 
 
--(void)removeAllItems;
+-(void)addAndSendMessage:( TL_localMessage * _Nonnull )message sender:( SenderItem * _Nonnull )sender;
+-(void)addAndSendMessages:(NSArray *)messages senders:(NSArray *)senders;
+-(void)addAndSendMessages:(NSArray *)messages senders:(NSArray *)senders sync:(BOOL)sync;
 
-+(void)drop;
+-(void)addMessageWithoutSavingState:(TL_localMessage *)message;
+
+-(void)swapFiltersBeforePrevLoaded;
+-(BOOL)isNeedSwapFilters;
+
 -(void)drop:(BOOL)dropMemory;
 
+-(void)startChannelPolling;
+-(void)stopChannelPolling;
+-(void)startChannelPollingIfAlreadyStoped;
 -(TL_conversation *)conversation;
+
+-(void)items:(NSArray *)msgIds complete:(void (^)(NSArray *list))complete;
+
+-(int)itemsCount;
+
+-(void)updateMessage:(TL_localMessage *)message;
+
+// protected methods
+
+-(ASQueue *)queue;
+
+-(void)setProccessing:(BOOL)isProccessing;
+-(void)performCallback:(selectHandler)selectHandler result:(NSArray *)result range:(NSRange )range controller:(ChatHistoryController *)controller;
+
++ (void)dispatchOnChatQueue:(dispatch_block_t)block;
++ (void)dispatchOnChatQueue:(dispatch_block_t)block synchronous:(BOOL)synchronous;
++ (dispatch_queue_t)nativeQueue;
+
+
 @end
 

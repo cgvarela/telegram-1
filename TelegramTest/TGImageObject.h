@@ -11,6 +11,7 @@
 #import "TGCache.h"
 #import "TLFileLocation+Extensions.h"
 #import "ImageObject.h"
+#import <SSignalKit/SSignalKit.h>
 @class TGImageView;
 
 
@@ -27,5 +28,15 @@
 @end
 
 @interface TGImageObject : ImageObject
+
+@property (nonatomic,assign) ImageProcessor imageProcessor;
+@property (nonatomic,assign) ImageProcessor thumbProcessor;
+
++(SThreadPool *)threadPool;
+
+
+-(BOOL)isset;
+
+
 
 @end

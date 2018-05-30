@@ -13,30 +13,22 @@
 #import "TGWebpageTWObject.h"
 #import "TGWebpageStandartObject.h"
 #import "TGWebpageArticle.h"
+#import "TGWebpageGifObject.h"
+#import "TGWebpageDocumentObject.h"
 #import "NSAttributedString+Hyperlink.h"
+
+#import "TGArticleImageObject.h"
+#import "NSImage+RHResizableImageAdditions.h"
+
 @implementation TGWebpageObject
 
-NSImage *placeholder() {
-    static NSImage *image = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        
-        NSRect rect = NSMakeRect(0, 0, 1, 1);
-        image = [[NSImage alloc] initWithSize:rect.size];
-        [image lockFocus];
-        
-        [GRAY_BORDER_COLOR setFill];
-        NSRectFill(rect);
-        [image unlockFocus];
-        
-    });
-    return image;
-}
 
--(id)initWithWebPage:(TLWebPage *)webpage {
+
+-(id)initWithWebPage:(TLWebPage *)webpage tableItem:(MessageTableItem *)item {
     if(self = [super init]) {
         
         _webpage = webpage;
+        _tableItem = item;
         
         
         NSMutableParagraphStyle *style = [NSMutableParagraphStyle new];
@@ -50,9 +42,9 @@ NSImage *placeholder() {
             
             [author appendString:webpage.author withColor:DARK_BLACK];
             
-            [author setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12.5] forRange:author.range];
+            [author setFont:[SettingsArchiver fontMedium13] forRange:author.range];
             
-            [author addAttribute:NSParagraphStyleAttributeName value:style range:author.range];
+          //  [author addAttribute:NSParagraphStyleAttributeName value:style range:author.range];
             
             _author = author;
             
@@ -64,31 +56,17 @@ NSImage *placeholder() {
         if(webpage.title) {
             NSMutableAttributedString *title = [[NSMutableAttributedString alloc] init];
             
-            
-            
             [title appendString:webpage.title withColor:[NSColor blackColor]];
-            [title setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12.5] forRange:title.range];
+            [title setFont:[SettingsArchiver fontMedium13] forRange:title.range];
             
             _title = title;
         }
-//        
-//        if(!_author) {
-//            
-//            NSMutableAttributedString *copy = [_title mutableCopy];
-//            
-//            [copy setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12.5] forRange:copy.range];
-//            [copy addAttribute:NSParagraphStyleAttributeName value:style range:copy.range];
-//            _author = copy;
-//            
-//        }
-        
         NSMutableAttributedString *siteName = [[NSMutableAttributedString alloc] init];
         
-        [siteName appendString:webpage.site_name ? webpage.site_name : @"Link Preview" withColor:GRAY_TEXT_COLOR];
-        
-        [siteName setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12.5] forRange:siteName.range];
-        [siteName addAttribute:NSParagraphStyleAttributeName value:style range:siteName.range];
-        
+        [siteName appendString:webpage.site_name ? webpage.site_name : webpage.document ? NSLocalizedString(webpage.type, nil) : @"Link Preview" withColor:LINK_COLOR];
+
+        [siteName setFont:[SettingsArchiver fontMedium13] forRange:siteName.range];
+      //  [siteName addAttribute:NSParagraphStyleAttributeName value:style range:siteName.range];
         _siteName = siteName;
         
         
@@ -97,8 +75,16 @@ NSImage *placeholder() {
             
             NSMutableAttributedString *desc = [[NSMutableAttributedString alloc] init];
             
-            [desc appendString:webpage.n_description withColor:[NSColor blackColor]];
-            [desc setFont:[NSFont fontWithName:@"HelveticaNeue" size:12.5] forRange:desc.range];
+            NSString *trimmedDesc = webpage.n_description;
+            static const int maxDesc = 300;
+            if (trimmedDesc.length > maxDesc) {
+                trimmedDesc = [trimmedDesc substringWithRange:NSMakeRange(0, MIN(maxDesc,trimmedDesc.length))];
+                trimmedDesc = [trimmedDesc stringByAppendingString:@"..."];
+            }
+            
+            [desc appendString:trimmedDesc withColor:NSColorFromRGB(0x000000)];
+            [desc setFont:[SettingsArchiver font13] forRange:desc.range];
+            
             
             NSMutableParagraphStyle *style = [NSMutableParagraphStyle new];
             style.lineBreakMode = NSLineBreakByWordWrapping;
@@ -107,21 +93,25 @@ NSImage *placeholder() {
             [desc addAttribute:NSParagraphStyleAttributeName value:style range:desc.range];
             
             
+            
             NSString *t = webpage.title.length > 0 ? webpage.title : webpage.author;
             
             if(t.length > 0 && _author == nil)  {
                 NSMutableAttributedString *title = [[NSMutableAttributedString alloc] init];
                 
-                [title appendString:[NSString stringWithFormat:@"%@\n",t] withColor:[NSColor blackColor]];
-                [title setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12.5] forRange:title.range];
+                [title appendString:[NSString stringWithFormat:@"%@\n",t] withColor:NSColorFromRGB(0x000000)];
+                [title setFont:[SettingsArchiver fontMedium13] forRange:title.range];
+                
                 
                 [desc insertAttributedString:title atIndex:0];
             }
             
-            
             _desc = desc;
             
             [desc detectAndAddLinks:URLFindTypeLinks];
+            
+            [desc setSelectionColor:NSColorFromRGB(0xffffff) forColor:NSColorFromRGB(0x000000)];
+            
         } else {
             _desc = [[NSAttributedString alloc] init];
         }
@@ -139,13 +129,18 @@ NSImage *placeholder() {
             TLPhotoSize *photoSize = [photo lastObject];
             
             
-            _imageObject = [[TGImageObject alloc] initWithLocation:photoSize.location placeHolder:placeholder() sourceId:0 size:photoSize.size];
+            _imageObject = [[TGImageObject alloc] initWithLocation:photoSize.location placeHolder:gray_resizable_placeholder() sourceId:0 size:photoSize.size];
             
             
             NSSize imageSize = strongsize(NSMakeSize(photoSize.w, photoSize.h), 320);
             
             
             _imageObject.imageSize = imageSize;
+            
+            
+            _roundObject = [[TGArticleImageObject alloc] initWithLocation:photoSize.location placeHolder:gray_resizable_placeholder() sourceId:0 size:photoSize.size];
+            _roundObject.imageProcessor = [ImageUtils c_processor];
+            _roundObject.imageSize = NSMakeSize(60, 60);
         }
         
         
@@ -181,55 +176,64 @@ NSImage *placeholder() {
     
 }
 
-
+-(void)dealloc {
+    
+}
 
 -(Class)webpageContainer {
     return NSClassFromString(@"TGWebpageContainer");
 }
 
-+(id)objectForWebpage:(TLWebPage *)webpage {
-    
-    
-#ifdef TGDEBUG
-    
-   // if(!ACCEPT_FEATURE)
-     //   return nil;
-    
-#endif
-    
-    
+static NSCache *webpages;
 
+
+
++(id)objectForWebpage:(TLWebPage *)webpage tableItem:(MessageTableItem *)item {
+    
+    
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        webpages = [[NSCache alloc] init];
+        [webpages setCountLimit:150];
+    });
+    
+    Class webpageClass = [NSNull class];
     
     if([webpage.site_name isEqualToString:@"YouTube"] && [webpage.type isEqualToString:@"video"])
+        webpageClass = [TGWebpageYTObject class];
+     else if([webpage.site_name isEqualToString:@"Instagram"])
+         webpageClass = [TGWebpageIGObject class];
+    else if([webpage.site_name isEqualToString:@"Twitter"])
+        webpageClass = [TGWebpageTWObject class];
+    else if([webpage.type isEqualToString:@"article"] || [webpage.type isEqualToString:@"app"])
+        webpageClass = [TGWebpageArticle class];
+    else if(webpage.document)
+        webpageClass = [TGWebpageDocumentObject class];
+    else
+        webpageClass = [TGWebpageStandartObject class];
+    
+    
+    NSString *key = [NSString stringWithFormat:@"%@_%ld",NSStringFromClass(webpageClass),webpage.n_id];
+    
+    TGWebpageObject *object = [webpages objectForKey:key];
+    
+    if(!object && webpageClass != [NSNull class])
     {
-        return [[TGWebpageYTObject alloc] initWithWebPage:webpage];
-    }
+        object = [[webpageClass alloc] initWithWebPage:webpage tableItem:item];
+        [webpages setObject:object forKey:key];
+    } else if (object)
+        object.tableItem = item;
     
-    if([webpage.site_name isEqualToString:@"Instagram"])
-    {
-        return [[TGWebpageIGObject alloc] initWithWebPage:webpage];
-    }
+    return object;
     
-    if([webpage.site_name isEqualToString:@"Twitter"])
-    {
-        return [[TGWebpageTWObject alloc] initWithWebPage:webpage];
-    }
-    
-    
-    
-    
-    if([webpage.type isEqualToString:@"article"] || [webpage.type isEqualToString:@"app"] || [webpage.type isEqualToString:@"document"])
-    {
-        return [[TGWebpageArticle alloc] initWithWebPage:webpage];
-    }
-    
-    return [[TGWebpageStandartObject alloc] initWithWebPage:webpage];
-    
-    return nil;
 }
 
 -(NSImage *)siteIcon  {
     return nil;
+}
+
+-(void)doAfterDownload {
+    
 }
 
 -(int)blockHeight {

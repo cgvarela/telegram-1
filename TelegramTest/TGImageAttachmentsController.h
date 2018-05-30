@@ -14,9 +14,12 @@
 
 -(void)didChangeAttachmentsCount:(int)futureCount;
 
+
 @end
 
 @interface TGImageAttachmentsController : TMView
+
+@property (nonatomic,strong,readonly) TL_conversation *conversation;
 
 
 @property (nonatomic,weak) id<TGImageAttachmentsControllerDelegate> delegate;
@@ -32,5 +35,6 @@
 
 -(NSArray *)attachments;
 
+-(BOOL)isDone;
 
 @end

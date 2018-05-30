@@ -27,7 +27,7 @@ typedef enum {
 - (BOOL)isBlocked;
 - (void)rebuildNames;
 - (void)rebuidStatuses;
-
+- (BOOL)isServiceUser;
 
 -(BOOL)isBot;
 
@@ -38,6 +38,9 @@ typedef enum {
 - (NSString *)phoneWithFormat;
 
 - (NSAttributedString *)dialogTitle;
+
+- (NSSize)dialogTitleSize;
+- (NSSize)dialogEncryptedTitleSize;
 - (NSAttributedString *)dialogTitleEncrypted;
 - (NSAttributedString *)chatInfoTitle;
 
@@ -49,10 +52,12 @@ typedef enum {
 //Statuses
 - (NSAttributedString *)statusAttributedString;
 - (NSAttributedString *)statusForMessagesHeaderView;
+- (NSAttributedString *)statusForChatHeader;
 - (NSAttributedString *)statusForUserInfoView;
 - (NSAttributedString *)statusForGroupInfo;
 - (NSAttributedString *)statusForSearchTableView;
 - (NSAttributedString *)statusForProfile;
+
 
 
 - (NSAttributedString *)userNameTitle;
@@ -61,15 +66,17 @@ typedef enum {
 - (int)lastSeenUpdate;
 - (void)setLastSeenUpdate:(int)seenUpdate;
 
+-(NSString *)searchString;
+
 
 - (NSString *)dialogFullName;
 - (TLInputPeer *)inputPeer;
 - (TLInputUser *)inputUser;
-- (NSString *)shortLastSeen;
 - (NSString *)lastSeen;
 - (int)lastSeenTime;
 - (TL_conversation *)dialog;
 - (TL_contact *)contact;
 
+-(BOOL)isBotInlinePlaceholder;
 
 @end

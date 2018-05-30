@@ -28,6 +28,15 @@
     if(self = [super init]) {
         
         _conversation = message.conversation;
+        
+        if(message.chat.migrated_to.channel_id != 0) {
+            
+            TLChat *chat = [[ChatsManager sharedManager] find:message.chat.migrated_to.channel_id];
+            
+            _conversation = [chat dialog];
+            
+        }
+        
         _message = message;
         
         _selectText = selectedText;
@@ -65,11 +74,24 @@
         [_dateText appendString:@"" withColor:NSColorFromRGB(0xaeaeae)];
     }
     
+    if(self.conversation.type != DialogTypeSecretChat && self.conversation.chat)
+        self.nameTextSize = [self.conversation.chat dialogTitleSize];
+    else if(self.conversation.type == DialogTypeSecretChat)
+        self.nameTextSize = [self.conversation.user dialogEncryptedTitleSize];
+    else
+        self.nameTextSize = [self.conversation.user dialogTitleSize];
+    
+    self.nameTextSize = NSMakeSize(self.nameTextSize.width + (self.conversation.isMute ? 20 : 0), self.nameTextSize.height);
+    
     _dateSize = [_dateText size];
     _dateSize.width+=5;
     _dateSize.width = ceil(_dateSize.width);
     _dateSize.height = ceil(_dateSize.height);
     
+}
+
+-(int)height {
+    return 66;
 }
 
 -(TL_localMessage *)message {
@@ -80,5 +102,8 @@
     return[[NSString stringWithFormat:@"search_message_%d",_message.n_id] hash];
 }
 
+-(Class)viewClass {
+    return NSClassFromString(@"SearchMessageCellView");
+}
 
 @end

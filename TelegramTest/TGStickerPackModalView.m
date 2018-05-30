@@ -8,19 +8,18 @@
 
 #import "TGStickerPackModalView.h"
 #import "TGAllStickersTableView.h"
-#import "EmojiViewController.h"
 #import "TGMessagesStickerImageObject.h"
 #import "TGImageView.h"
+#import "TGModernESGViewController.h"
+#import "TGModalArchivedPacks.h"
+#import "TLStickerSet+Extension.h"
 @interface TGStickerPackModalView ()<TMHyperlinkTextFieldDelegate>
 @property (nonatomic,strong) TGAllStickersTableView *tableView;
 
 @property (nonatomic,strong) TL_messages_stickerSet *pack;
 @property (nonatomic,strong) BTRButton *addButton;
-@property (nonatomic,strong) TMHyperlinkTextField *nameField;
-@property (nonatomic,strong) TGImageView *packHeaderImageView;
-@property (nonatomic,strong) BTRButton *closeButton;
-@property (nonatomic,strong) TMView *headerView;
 @property (nonatomic,strong) TMView *bottomView;
+@property (nonatomic,strong) BTRButton *cLink;
 @end
 
 @implementation TGStickerPackModalView
@@ -31,20 +30,8 @@
     // Drawing code here.
 }
 
-
-static NSImage * greenBackgroundImage(NSSize size) {
-    static NSImage *image = nil;
-
-    NSRect rect = NSMakeRect(0, 0, size.width, size.height);
-    image = [[NSImage alloc] initWithSize:rect.size];
-    [image lockFocus];
-    [NSColorFromRGB(0x54c759) set];
-    NSBezierPath *path = [NSBezierPath bezierPath];
-    [path appendBezierPathWithRoundedRect:NSMakeRect(0, 0, rect.size.width, rect.size.height) xRadius:14 yRadius:14];
-    [path fill];
-    
-    [image unlockFocus];
-    return image;//image_VideoPlay();
+-(int)bottomOffset {
+    return 50;
 }
 
 -(instancetype)initWithFrame:(NSRect)frameRect {
@@ -52,113 +39,69 @@ static NSImage * greenBackgroundImage(NSSize size) {
         
         [self setContainerFrameSize:NSMakeSize(384, 380)];
         
-        _tableView = [[TGAllStickersTableView alloc] initWithFrame:NSMakeRect(0, 50, self.containerSize.width, self.containerSize.height - 130 )];
+        
+        
+        
+        _tableView = [[TGAllStickersTableView alloc] initWithFrame:NSZeroRect];
+        
+
         
         [self addSubview:_tableView.containerView];
         
-        
+        weak();
+
         
         _bottomView = [[TMView alloc] initWithFrame:NSMakeRect(0, 0, self.containerSize.width, 50)];
         
-        _bottomView.backgroundColor = NSColorFromRGB(0xfafafa);
+        [_bottomView setDrawBlock:^{
+            
+            [GRAY_BORDER_COLOR set];
+            NSRectFill(NSMakeRect(0, NSHeight(weakSelf.bottomView.frame) - DIALOG_BORDER_WIDTH, NSWidth(weakSelf.bottomView.frame), DIALOG_BORDER_WIDTH));
+        }];
+        
+        self.bottomView.backgroundColor = [NSColor whiteColor];
+        
         
         [self addSubview:_bottomView];
     
         
-        TMView *bottomSeparator = [[TMView alloc] initWithFrame:NSMakeRect(0, 49, self.containerSize.width, 1)];
-        
-        bottomSeparator.backgroundColor = GRAY_BORDER_COLOR;
         
         _addButton = [[BTRButton alloc] initWithFrame:NSMakeRect(0, 0, 130, 27)];
         
         [_addButton setTitleFont:TGSystemMediumFont(14) forControlState:BTRControlStateNormal];
         
-        [_addButton setTitleColor:[NSColor whiteColor] forControlState:BTRControlStateNormal];
+        [_addButton setTitleColor:LINK_COLOR forControlState:BTRControlStateNormal];
         
         [_addButton setTitle:NSLocalizedString(@"StickerPack.AddStickerPack", nil) forControlState:BTRControlStateNormal];
         
-        weak();
         
         [_addButton addBlock:^(BTRControlEvents events) {
             
+            
             [weakSelf close:NO];
+            
+            if(weakSelf.addcallback != nil)
+            {
+                weakSelf.addcallback();
+                
+                return;
+            }
             
             [TMViewController showModalProgress];
             
             
-            [RPCRequest sendRequest:[TLAPI_messages_installStickerSet createWithStickerset:[TL_inputStickerSetID createWithN_id:weakSelf.pack.set.n_id access_hash:weakSelf.pack.set.access_hash] disabled:NO] successHandler:^(id request, id response) {
+            [[MessageSender addStickerPack:weakSelf.pack] startWithNext:^(id next) {
                 
-                dispatch_after_seconds(0.2, ^{
-                    [TMViewController hideModalProgressWithSuccess];
-                });
-                
-                [EmojiViewController reloadStickers];
-                
-            } errorHandler:^(id request, RpcError *error) {
-                [TMViewController hideModalProgress]; 
-            } timeout:10];
-            
+            }];
+                        
         } forControlEvents:BTRControlEventMouseDownInside];
-        
-        
         
         
         [_addButton setCenterByView:_bottomView];
         
-        [_bottomView addSubview:bottomSeparator];
         [_bottomView addSubview:_addButton];
         
         
-        
-        
-        _headerView = [[TMView alloc] initWithFrame:NSMakeRect(0, self.containerSize.height - 80, self.containerSize.width, 80)];
-        
-        _headerView.backgroundColor = NSColorFromRGB(0xfafafa);
-        
-        [self addSubview:_headerView];
-        
-        
-        
-        _nameField = [[TMHyperlinkTextField alloc] init];
-        [_nameField setDrawsBackground:NO];
-        [_nameField setBordered:NO];
-        [_nameField setSelectable:NO];
-        
-        _nameField.hardYOffset = 10;
-
-        
-        [_nameField setFrame:NSMakeRect(0, 15, self.containerSize.width, 27)];
-        [_nameField setAlignment:NSCenterTextAlignment];
-        [_nameField setTextColor:TEXT_COLOR];
-        [_nameField setFont:TGSystemFont(13)];
-        
-        _nameField.url_delegate = self;
-        
-        [_headerView addSubview:_nameField];
-        
-        TMView *separator = [[TMView alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(_headerView.frame), 1)];
-        
-        separator.backgroundColor = GRAY_BORDER_COLOR;
-        
-        [_headerView addSubview:separator];
-        
-        
-        _packHeaderImageView = [[TGImageView alloc] initWithFrame:NSMakeRect(10, 10, 0, 0)];
-        
-        [_headerView addSubview:_packHeaderImageView];
-        
-        _closeButton = [[BTRButton alloc] initWithFrame:NSMakeRect(NSWidth(_headerView.frame) - image_CancelReply().size.width - 10, NSHeight(_headerView.frame) - image_CancelReply().size.height - 10, image_CancelReply().size.width, image_CancelReply().size.height)];
-        
-        [_closeButton setImage:image_CancelReply() forControlState:BTRControlStateNormal];
-        
-        
-        [_closeButton addBlock:^(BTRControlEvents events) {
-            [weakSelf close:YES];
-        } forControlEvents:BTRControlEventMouseDownInside];
-        
-        [_headerView addSubview:_closeButton];
-
-
     }
     
     return self;
@@ -184,97 +127,100 @@ static NSImage * greenBackgroundImage(NSSize size) {
    
 }
 
--(void)setStickerPack:(TL_messages_stickerSet *)stickerPack {
+-(void)setCanSendSticker:(BOOL)canSendSticker {
+    _canSendSticker = canSendSticker;
+    _tableView.canSendStickerAlways = canSendSticker;
+}
+
+
+
+-(void)show:(NSWindow *)window animated:(BOOL)animated stickerPack:(TL_messages_stickerSet *)stickerPack messagesController:(MessagesViewController *)messagesViewController {
     
+    _messagesViewController = messagesViewController;
+    _tableView.messagesViewController = messagesViewController;
     _pack = stickerPack;
     
+    [self enableHeader:stickerPack.set.title];
     
-    NSMutableAttributedString *title = [[NSMutableAttributedString alloc] init];
+   
     
-    
-    NSRange range = [title appendString:_pack.set.title withColor:TEXT_COLOR];
-    
-    [title setFont:TGSystemFont(15) forRange:range];
-    
-    [title appendString:@"\n"];
-    
-    range = [title appendString:[NSString stringWithFormat:NSLocalizedString(@"Stickers.StickersCount", nil), stickerPack.documents.count] withColor:GRAY_TEXT_COLOR];
-    
-    [title setFont:TGSystemFont(13) forRange:range];
-    
-    [title appendString:@"\n"];
-    
-    range = [title appendString:NSLocalizedString(@"Context.CopyLink", nil) withColor:LINK_COLOR];
-    
-    
-    [title setFont:TGSystemMediumFont(13) forRange:range];
-    
-    [title setLink:@"copy" forRange:range];
-    
-    
-    [_nameField setAttributedStringValue:title];
-    [_nameField sizeToFit];
-    
-    
-    
-    [_tableView showWithStickerPack:stickerPack];
-    
-    __block BOOL packIsset = NO;
-    
-    
-    __block TLDocument *headerSticker;
-    
-    [[stickerPack documents] enumerateObjectsUsingBlock:^(TLDocument *obj, NSUInteger idx, BOOL *stop) {
-        
-        if(idx == 0)
-            headerSticker = obj;
-        
-        NSArray *filter = [[EmojiViewController allStickers] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",obj.n_id]];
-        
-        if(filter.count > 0) {
-            packIsset = YES;
-            *stop = YES;
-        }
-        
-    }];
+    __block BOOL packIsset = [TGModernESGViewController setWithId:stickerPack.set.n_id] != nil;
     
     
     NSUInteger dif = ceil((float)stickerPack.documents.count/5.0);
     
     if(dif < 4) {
-        [self setContainerFrameSize:NSMakeSize(self.containerSize.width, (packIsset ? 0 : 50) + 80 + dif*80)];
+        [self setContainerFrameSize:NSMakeSize(self.containerSize.width, (packIsset ? 0 : 50) + self.topOffset + dif*80)];
     }
     
-    NSImage *placeholder = [[NSImage alloc] initWithData:headerSticker.thumb.bytes];
+    _cLink = [[BTRButton alloc] initWithFrame:NSMakeRect( roundf((self.topOffset - image_StickerLink().size.height)/2.0f), self.containerSize.height - image_StickerLink().size.height - roundf((self.topOffset - image_StickerLink().size.height)/2.0f), image_StickerLink().size.width, image_StickerLink().size.height)];
     
-    if(!placeholder)
-        placeholder = [NSImage imageWithWebpData:headerSticker.thumb.bytes error:nil];
-    
-    TGMessagesStickerImageObject *imageObject = [[TGMessagesStickerImageObject alloc] initWithLocation:headerSticker.thumb.location placeHolder:placeholder];
-    imageObject.imageSize = strongsize(NSMakeSize(headerSticker.thumb.w, headerSticker.thumb.h), 50);
-    
-    _packHeaderImageView.object = imageObject;
-    [_packHeaderImageView setFrameSize:imageObject.imageSize];
-    
-    [_packHeaderImageView setCenteredYByView:_headerView];
+    [_cLink setImage:[image_StickerLink() imageTintedWithColor:BLUE_ICON_COLOR] forControlState:BTRControlStateNormal];
     
     
-    [_nameField setFrameOrigin:NSMakePoint(NSMaxX(_packHeaderImageView.frame) + 10, 0)];
+    [_cLink addBlock:^(BTRControlEvents events) {
+        
+        [TMViewController showModalProgressWithDescription:NSLocalizedString(@"Conversation.CopyToClipboard", nil)];
+        
+        NSPasteboard* cb = [NSPasteboard generalPasteboard];
+        
+        [cb declareTypes:[NSArray arrayWithObjects:NSStringPboardType, nil] owner:nil];
+        [cb setString:[NSString stringWithFormat:@"https://telegram.me/addstickers/%@",stickerPack.set.short_name] forType:NSStringPboardType];
+        
+        dispatch_after_seconds(0.2, ^{
+            [TMViewController hideModalProgressWithSuccess];
+        });
+        
+    } forControlEvents:BTRControlEventClick];
     
-    [_nameField setCenteredYByView:_headerView];
+    [self addSubview:_cLink];
     
-    [_tableView.containerView setFrame:NSMakeRect(0, packIsset ? 0 : 50, self.containerSize.width, packIsset ? self.containerSize.height - 80 : self.containerSize.height - 130)];
     
-    [_bottomView setHidden:packIsset];
+    [_tableView.containerView setFrame:NSMakeRect(0, (!packIsset ? self.bottomOffset : 0), self.containerSize.width, self.containerSize.height - (!packIsset ? self.bottomOffset : 0) - self.topOffset )];
+    
+    
+    [self addScrollEvent:_tableView];
+    
+    [super show:window animated:animated];
+
+    
+    [_tableView showWithStickerPack:stickerPack];
+
+    [_bottomView setHidden:packIsset || stickerPack.set.isMasks];
     
     [_addButton setTitle:[NSString stringWithFormat:NSLocalizedString(@"StickerPack.AddStickerPack", nil),stickerPack.documents.count] forControlState:BTRControlStateNormal];
-  
-    [_addButton setBackgroundImage:greenBackgroundImage(NSMakeSize(130, 27)) forControlState:BTRControlStateNormal];
     
     
-    [_headerView setFrameOrigin:NSMakePoint(0, self.containerSize.height - 80)];
-        
+    [_addButton setTitleFont:TGSystemFont(14) forControlState:BTRControlStateNormal];
+    
+    
+    
 }
+
+
+-(void)_didScrolledTableView:(NSNotification *)notification {
+    self.drawHeaderSeparator = _tableView.scrollView.documentOffset.y > 0;
+}
+
+
+
+
+-(void)modalViewDidHide {
+    
+    int bp = 0;
+}
+
+-(void)modalViewDidShow {
+    [super modalViewDidShow];
+    [self.window makeFirstResponder:self.tableView];
+    [self.tableView becomeFirstResponder];
+}
+
+-(void)dealloc {
+    [_tableView clear];
+}
+
+
 
 
 @end

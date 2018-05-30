@@ -40,6 +40,13 @@
     return request;
 }
 
++ (id)sendRequest:(id)object successHandler:(RPCSuccessHandler)successHandler errorHandler:(RPCErrorHandler)errorHandler timeout:(int)timeout queue:(dispatch_queue_t)queue alwayContinueWithErrorContext:(BOOL)alwayContinueWithErrorContext {
+    RPCRequest *request = [self sendRequest:object successHandler:successHandler errorHandler:errorHandler timeout:timeout];
+    request.queue = queue;
+    request.alwayContinueWithErrorContext = alwayContinueWithErrorContext;
+    return request;
+}
+
 - (void)timeoutInterval:(NSTimer *)timer {
     RPCRequest *request = [timer userInfo];
     request.error = [[RpcError alloc] init];
@@ -69,6 +76,18 @@
     
     return message;
     
+}
+
++ (id)sendRequest:(id)object successHandler:(RPCSuccessHandler)successHandler errorHandler:(RPCErrorHandler)errorHandler alwayContinueWithErrorContext:(BOOL)alwayContinueWithErrorContext {
+    RPCRequest *message = [[RPCRequest alloc] init];
+    message.object = object;
+    message.alwayContinueWithErrorContext = alwayContinueWithErrorContext;
+    message.successHandler = successHandler;
+    message.errorHandler = errorHandler;
+    
+    [[MTNetwork instance] sendRequest:message];
+    
+    return message;
 }
 
 
@@ -119,6 +138,7 @@
     self.object = nil;
     self.successHandler = nil;
     self.errorHandler = nil;
+    
 }
 
 - (void)completeHandler {
@@ -129,42 +149,73 @@
     
     
     dispatch_block_t block = ^{
+        if([self.response isKindOfClass:[RpcError class]]) {
+            self.error = self.response;
+            self.response = nil;
+        }
+        
         if(self.response) {
             if(self.successHandler != nil) {
                 self.successHandler(self, self.response);
                 
             }
         } else {
-            if(self.errorHandler != nil) {
-                
-                if( self.error.error_code == 401)
-                {
-                    if(![self.error.error_msg isEqualToString:@"SESSION_PASSWORD_NEEDED"]) {
-                        
-                        [[Telegram delegate] logoutWithForce:YES];
-                        
-                    }
-                } else if( self.error.error_code == 303 && ([self.error.error_msg hasPrefix:@"PHONE_MIGRATE"] || [self.error.error_msg hasPrefix:@"NETWORK_MIGRATE"] || [self.error.error_msg hasPrefix:@"USER_MIGRATE"])) {
+            if( self.error.error_code == 401)
+            {
+                if(![self.error.error_msg isEqualToString:@"SESSION_PASSWORD_NEEDED"]) {
                     
-                    [[MTNetwork instance] setDatacenter:self.error.resultId];
-                    [[MTNetwork instance] initConnectionWithId:self.error.resultId];
-                } else {
-                     MTLog(@"%@",self.error.error_msg);
+                    [[Telegram delegate] logoutWithForce:YES];
+                    
                 }
+            } else if( self.error.error_code == 303 && ([self.error.error_msg hasPrefix:@"PHONE_MIGRATE"] || [self.error.error_msg hasPrefix:@"NETWORK_MIGRATE"] || [self.error.error_msg hasPrefix:@"USER_MIGRATE"])) {
                 
+                [[MTNetwork instance] setDatacenter:self.error.resultId];
+                [[MTNetwork instance] initConnectionWithId:self.error.resultId];
+            } else if([self.error.error_msg isEqualToString:@"PEER_FLOOD"]) {
+                
+                
+                NSString *localizedKey = nil;
+                
+                static NSDictionary *keys;
+                static dispatch_once_t onceToken;
+                dispatch_once(&onceToken, ^{
+                    keys = @{NSStringFromClass([TLAPI_messages_sendMessage class]):NSLocalizedString(@"PEER_FLOOD_MESSAGES", nil),NSStringFromClass([TLAPI_messages_sendMedia class]):NSLocalizedString(@"PEER_FLOOD_MESSAGES", nil),NSStringFromClass([TLAPI_messages_sendMedia class]):NSLocalizedString(@"PEER_FLOOD_MESSAGES", nil)};
+                });
+                
+                localizedKey = keys[NSStringFromClass([self.object class])];
+                
+                if(localizedKey) {
+                    [ASQueue dispatchOnMainQueue:^{
+                        
+                        NSAlert *alert = [NSAlert alertWithMessageText:appName() informativeText:localizedKey block:^(id result) {
+                            if([result intValue] != 1000) {
+                                
+                                open_user_by_name(@{@"domain":@"spambot"});
+                            }
+                        }];
+                        [alert addButtonWithTitle:NSLocalizedString(@"OK", nil)];
+                        [alert addButtonWithTitle:NSLocalizedString(@"Alert.MoreInfo", nil)];
+                        [alert show];
+                    }];
+                }
+            } else {
+                MTLog(@"%@",self.error.error_msg);
+            }
+            
+            if (self.errorHandler != nil) {
                 self.errorHandler(self, self.error);
                 
-                
                 if(self.error.error_code == 502) {
-                   // alert(NSLocalizedString(@"App.ConnectionError", nil), NSLocalizedString(@"App.ConnectionErrorDesc", nil));
+                    // alert(NSLocalizedString(@"App.ConnectionError", nil), NSLocalizedString(@"App.ConnectionErrorDesc", nil));
                 }
-                
             }
+            
+
         }
     };
     
     
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self.timer invalidate];
         self.timer = nil;
     }];

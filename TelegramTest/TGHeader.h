@@ -9,16 +9,21 @@
 #ifndef Telegram_TGHeader_h
 #define Telegram_TGHeader_h
 
+
+#import <Availability.h>
+#undef  __AVAILABILITY_INTERNAL_WEAK_IMPORT
+#define __AVAILABILITY_INTERNAL_WEAK_IMPORT \
+__attribute__((weak_import,deprecated("API newer than Deployment Target.")))
+
 #define TGOUTMESSAGE 0x2
 #define TGUNREADMESSAGE 0x1
 #define TGOUTUNREADMESSAGE 0x3
 #define TGNOFLAGSMESSAGE 0x0
-
 #define TGFWDMESSAGE 0x4
 #define TGREPLYMESSAGE 0x8
 #define TGMENTIONMESSAGE 16
 #define TGREADEDCONTENT 32
-
+#define TGFROMIDMESSAGE 256
 #define TGSESSIONCURRENT 0x1
 #define TGSESSIONOFFICIAL 0x2
 
@@ -44,7 +49,7 @@
 
 #define API_VERSION  [NSString stringWithFormat:@"%@.%@", [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"], [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleVersion"]]
 
-#define IS_RETINA ([[NSScreen mainScreen] backingScaleFactor] == 2.0)
+#define IS_RETINA (scaleFactor() == 2.0)
 
 #import <objc/runtime.h>
 #define DYNAMIC_PROPERTY(Name) static char k##Name; - (id) get##Name { return objc_getAssociatedObject(self, &k##Name);}; - (void) set##Name:(id)object { objc_setAssociatedObject(self, &k##Name, object, OBJC_ASSOCIATION_RETAIN); }
@@ -61,9 +66,23 @@
 
 #define NSColorFromRGBWithAlpha(rgbValue, alphaValue) [NSColor colorWithDeviceRed:((float)((rgbValue & 0xFF0000) >> 16))/255.0 green:((float)((rgbValue & 0xFF00) >> 8))/255.0 blue:((float)(rgbValue & 0xFF))/255.0 alpha:(alphaValue)]
 
-#define TGSystemFont(s) [NSFont fontWithName:@"HelveticaNeue" size:(s)]
-#define TGSystemMediumFont(s) [NSFont fontWithName:@"HelveticaNeue-Medium" size:(s)]
-#define TGSystemLightFont(s) [NSFont fontWithName:@"HelveticaNeue-Light" size:(s)]
+//#define TGSystemFont(s) [NSFont fontWithName:@"HelveticaNeue" size:(s)]
+//#define TGSystemMediumFont(s) [NSFont fontWithName:@"HelveticaNeue-Medium" size:(s)]
+//#define TGSystemLightFont(s) [NSFont fontWithName:@"HelveticaNeue-Light" size:(s)]
+//#define TGSystemItalicFont(s) [NSFont fontWithName:@"HelveticaNeue-Italic" size:(s)]
+//#define TGSystemBoldItalicFont(s) [NSFont fontWithName:@"HelveticaNeue-BoldItalic" size:(s)]
+//#define TGSystemBoldFont(s) [NSFont fontWithName:@"HelveticaNeue-Bold" size:(s)]
+
+//[NSFont fontWithName:@".SFNSDisplay-Regular" size:(s)]
+//[NSFont fontWithName:@".SFNSText-Medium" size:(s)]
+//[NSFont fontWithName:@".SFNSText-Regular" size:(s)]
+#define TGSystemFont(s) NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? ((s >= 13) ? [NSFont systemFontOfSize:(s)] : [NSFont systemFontOfSize:(s)  weight:NSFontWeightRegular]) : [NSFont fontWithName:@"HelveticaNeue" size:(s)]
+#define TGSystemMediumFont(s) NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? [NSFont systemFontOfSize:(s) weight:NSFontWeightSemibold] : [NSFont fontWithName:@"HelveticaNeue-Medium" size:(s)]
+#define TGSystemLightFont(s) NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? [NSFont systemFontOfSize:(s)  weight:NSFontWeightLight] : [NSFont fontWithName:@"HelveticaNeue-Light" size:(s)]
+#define TGSystemItalicFont(s) NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? [NSFont fontWithName:@".SFNSText-Italic" size:(s)] : [NSFont fontWithName:@"HelveticaNeue-Italic" size:(s)]
+#define TGSystemBoldItalicFont(s) NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? [NSFont fontWithName:@".SFNSText-BoldItalic" size:(s)] : [NSFont fontWithName:@"HelveticaNeue-BoldItalic" size:(s)]
+#define TGSystemBoldFont(s) NSAppKitVersionNumber > NSAppKitVersionNumber10_10_Max ? [NSFont systemFontOfSize:(s) weight:NSFontWeightBold] : [NSFont fontWithName:@"HelveticaNeue-Bold" size:(s)]
+
 
 #define VIDEO_COMPRESSED_PROGRESS 10.0f
 #define MAX_FILE_SIZE 1500000000
@@ -83,14 +102,18 @@
 #define DIALOG_BORDER_COLOR NSColorFromRGB(0xeaeaea)
 #define DIALOG_BORDER_WIDTH 1
 #define BLUE_COLOR_SELECT NSColorFromRGB(0x4c91c7)
+#define BLUE_COLOR NSColorFromRGB(0x4ba3e2)
 #define GRAY_BORDER_COLOR NSColorFromRGB(0xe4e4e4)
 #define LIGHT_GRAY_BORDER_COLOR NSColorFromRGB(0xededed)
 #define LINK_COLOR BLUE_UI_COLOR
-#define MIN_IMG_SIZE NSMakeSize(250,40)
-#define weakify() __block __typeof(&*self)strongSelf = self;
-
+#define BLUE_SEPARATOR_COLOR NSColorFromRGB(0x66A7DB)
+#define MIN_IMG_SIZE NSMakeSize(320,40)
+#define RED_COLOR NSColorFromRGB(0xee6363)
+#define DARK_GRAY_TEXT_COLOR NSColorFromRGB(0x333333)
+#define BLUE_ICON_COLOR NSColorFromRGB(0x0f8fe4)
+#define GRAY_ICON_COLOR NSColorFromRGB(0x9e9e9e)
 #define weak() __weak typeof(self) weakSelf = self;
-
+#define strongWeak() __block __typeof(&*self)strongSelf = weakSelf;
 #define APP_VERSION [[[[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"] componentsSeparatedByCharactersInSet:[[NSCharacterSet decimalDigitCharacterSet] invertedSet]] componentsJoinedByString:@""] intValue]
 
 #import "CFunctions.h"

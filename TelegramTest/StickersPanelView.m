@@ -11,13 +11,21 @@
 #import "TGStickerImageView.h"
 #import "TGMessagesStickerImageObject.h"
 #import "SenderHeader.h"
-#import "EmojiViewController.h"
 #import "TGTransformScrollView.h"
+#import "TGStickerPreviewModalView.h"
+#import "RBLPopover.h"
 @interface StickersPanelView ()
 @property (nonatomic,strong) TGTransformScrollView *scrollView;
 
 @property (nonatomic,strong) TMView *containerView;
 @property (nonatomic,strong) TMView *background;
+
+@property (nonatomic,strong) TGStickerPreviewModalView *previewModal;
+@property (nonatomic,assign) BOOL notSendUpSticker;
+
+@property (nonatomic,assign) long selectedIndex;
+
+@property (nonatomic,strong) NSArray *stickers;
 @end
 
 
@@ -90,8 +98,10 @@ static NSImage *higlightedImage() {
 
 
 -(void)rebuild:(NSArray *)stickers {
-    [self.containerView removeAllSubviews];
     
+    _selectedIndex = -1;
+    [self.containerView removeAllSubviews];
+    _stickers = stickers;
     
     __block NSUInteger xOffset = 0;
     
@@ -104,25 +114,62 @@ static NSImage *higlightedImage() {
             if(!placeholder)
                 placeholder = [NSImage imageWithWebpData:obj.thumb.bytes error:nil];
             
-            TGMessagesStickerImageObject *imgObj = [[TGMessagesStickerImageObject alloc] initWithLocation:obj.thumb.location placeHolder:placeholder];
+            if(!placeholder)
+                placeholder = white_background_color();
             
-            imgObj.imageSize = strongsize(NSMakeSize(obj.thumb.w, obj.thumb.h), NSHeight(self.frame) - 6);
+            TGMessagesStickerImageObject *imgObj = [[TGMessagesStickerImageObject alloc] initWithLocation:obj.thumb.location placeHolder:placeholder];
+            imgObj.reserved1 = obj;
+            imgObj.imageSize = strongsize(NSMakeSize(obj.thumb.w, obj.thumb.h), NSHeight(self.frame) - 10);
                         
             TGStickerImageView *imgView = [[TGStickerImageView alloc] initWithFrame:NSMakeRect(0, 0, imgObj.imageSize.width, imgObj.imageSize.height)];
             
-            
-            [imgView setTapBlock:^{
-                
-                [[Telegram rightViewController].messagesViewController sendSticker:obj forConversation:[Telegram conversation] addCompletionHandler:nil];
-                
-                [[Telegram rightViewController].messagesViewController setStringValueToTextField:@""];
-            }];
             
             imgView.object = imgObj;
             
             
             BTRButton *button = [[BTRButton alloc] initWithFrame:NSMakeRect(xOffset + 3, 2, hoverImage().size.width, NSHeight(self.bounds) - 6)];
-            [button setBackgroundImage:hoverImage() forControlState:BTRControlStateHover];
+            
+            weak();
+            
+            [button addBlock:^(BTRControlEvents events) {
+                
+                if(weakSelf.previewModal.isShown) {
+                    [weakSelf.previewModal close:YES];
+                    weakSelf.previewModal = nil;
+                    
+                    return;
+                }
+                
+                if(weakSelf.notSendUpSticker)
+                {
+                    weakSelf.notSendUpSticker = NO;
+                    return;
+                }
+                
+                [weakSelf.messagesViewController sendSticker:obj forConversation:self.messagesViewController.conversation addCompletionHandler:nil];
+                
+                TGInputMessageTemplate *template = self.messagesViewController.conversation.inputTemplate;
+                [template updateTextAndSave:[[NSAttributedString alloc] init]];
+                [template performNotification];
+                                
+                
+            } forControlEvents:BTRControlEventMouseUpInside];
+            
+            [button addBlock:^(BTRControlEvents events) {
+                
+                TGStickerPreviewModalView *preview = [[TGStickerPreviewModalView alloc] init];
+                
+                [preview setSticker:obj];
+                
+                [preview show:appWindow() animated:YES];
+                
+                weakSelf.previewModal = preview;
+                
+            } forControlEvents:BTRControlEventLongLeftClick];
+            
+            
+            [button setBackgroundImage:higlightedImage() forControlState:BTRControlStateSelected];
+            [button setBackgroundImage:higlightedImage() forControlState:BTRControlStateHover | BTRControlStateSelected];
             [button setBackgroundImage:higlightedImage() forControlState:BTRControlStateHighlighted];
             
             [imgView setCenterByView:button];
@@ -140,11 +187,56 @@ static NSImage *higlightedImage() {
     [self.containerView setFrameSize:NSMakeSize(xOffset, NSHeight(self.containerView.frame))];
 }
 
+-(void)selectNext {
+    if(_selectedIndex >= 0 && _selectedIndex < _containerView.subviews.count) {
+        [_containerView.subviews[_selectedIndex] setSelected:NO];
+    }
+    
+    _selectedIndex++;
+    
+    
+    if(_containerView.subviews.count == _selectedIndex) {
+        _selectedIndex = 0;
+    }
+    
+    
+    [_containerView.subviews[_selectedIndex] setSelected:YES];
+    
+    if(!NSContainsRect([_scrollView.documentView visibleRect], _containerView.subviews[_selectedIndex].frame)) {
+        [_scrollView.documentView scrollPoint:NSMakePoint(_containerView.subviews[_selectedIndex].frame.origin.x - NSWidth(_scrollView.frame)/2.0 + NSWidth(_containerView.subviews[_selectedIndex].frame)/2.0f, _containerView.subviews[_selectedIndex].frame.origin.y)];
+    }
 
+}
+
+-(TLDocument *)selectedSticker {
+    return _selectedIndex >= 0 ? _stickers[_selectedIndex] : nil;
+}
+
+-(void)selectPrev {
+    if(_selectedIndex >= 0 && _selectedIndex < _containerView.subviews.count) {
+        [_containerView.subviews[_selectedIndex] setSelected:NO];
+    }
+
+    _selectedIndex--;
+    
+    if(_selectedIndex < 0) {
+        _selectedIndex = _containerView.subviews.count-1;
+    }
+    
+    
+    [_containerView.subviews[_selectedIndex] setSelected:YES];
+    
+    if(!NSContainsRect([_scrollView.documentView visibleRect], _containerView.subviews[_selectedIndex].frame)) {
+        [_scrollView.documentView scrollPoint:NSMakePoint(_containerView.subviews[_selectedIndex].frame.origin.x - NSWidth(_scrollView.frame)/2.0 + NSWidth(_containerView.subviews[_selectedIndex].frame)/2.0f, _containerView.subviews[_selectedIndex].frame.origin.y)];
+    }
+    
+}
 
 -(void)show:(BOOL)animated stickers:(NSArray *)stickers {
     
     [self rebuild:stickers];
+    
+    [self.scrollView.clipView scrollRectToVisible:NSMakeRect(0, 0, 1, 1) animated:NO];
     
     if(self.alphaValue == 1.0f && !self.isHidden)
         return;
@@ -178,43 +270,47 @@ bool isRemoteStickersLoaded() {
 }
 
 -(void)showAndSearch:(NSString *)emotion animated:(BOOL)animated {
-
-    __block NSMutableArray *stickers = [[NSMutableArray alloc] init];
     
-    [[Storage yap] readWithBlock:^(YapDatabaseReadTransaction *transaction) {
+    if(self.messagesViewController.templateType == TGInputMessageTemplateTypeEditMessage)
+        return;
+    
+    [[Storage yap] asyncReadWithBlock:^(YapDatabaseReadTransaction *transaction) {
         
         
-         NSDictionary *data = [transaction objectForKey:@"allstickers" inCollection:STICKERS_COLLECTION];
+        NSDictionary *data = [transaction objectForKey:@"modern_stickers2" inCollection:STICKERS_COLLECTION];
         
-        stickers = [[data[@"serialized"] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(TL_document *evaluatedObject, NSDictionary *bindings) {
-            
-            TL_documentAttributeSticker *attr = (TL_documentAttributeSticker *) [evaluatedObject attributeWithClass:[TL_documentAttributeSticker class]];
-            
-            return [attr.alt isEqualToString:emotion];
-            
-        }]] mutableCopy];
+        NSDictionary *stickers = data[@"serialized"];
         
-        NSMutableDictionary *sort = [transaction objectForKey:@"stickersUsed" inCollection:STICKERS_COLLECTION];
         
-        [stickers sortUsingComparator:^NSComparisonResult(TL_document *obj1, TL_document *obj2) {
+        NSArray *sets = data[@"sets"];
+
+        
+        NSMutableArray *s = [NSMutableArray array];
+                              
+        [sets enumerateObjectsUsingBlock:^(TL_stickerSet *obj, NSUInteger idx, BOOL * _Nonnull stop) {
             
-            NSNumber *c1 = sort[@(obj1.n_id)];
-            NSNumber *c2 = sort[@(obj2.n_id)];
+            [stickers[@(obj.n_id)] enumerateObjectsUsingBlock:^(TL_document *evaluatedObject, NSUInteger idx, BOOL * _Nonnull stop) {
+                
+                TL_documentAttributeSticker *attr = evaluatedObject.stickerAttr;
+                
+                if([[attr.alt fixEmoji] isEqualToString:emotion]) {
+                    [s addObject:evaluatedObject];
+                }
+                
+            }];
             
-            if ([c1 longValue] > [c2 longValue])
-                return NSOrderedAscending;
-            else if ([c1 longValue] < [c2 longValue])
-                return NSOrderedDescending;
-            
-            return NSOrderedSame;
         }];
+        
+        if(s.count > 0) {
+            [ASQueue dispatchOnMainQueue:^{
+               [self show:YES stickers:s];
+            }];
+        }
         
     }];
     
     
-    if(stickers.count > 0) {
-        [self show:YES stickers:stickers];
-    }
+    
     
 }
 
@@ -247,233 +343,49 @@ bool isRemoteStickersLoaded() {
     __block BOOL has = NO;
     
     
-    TL_documentAttributeSticker *attribute = (TL_documentAttributeSticker *) [document attributeWithClass:[TL_documentAttributeSticker class]];
-    
-    if(attribute && attribute.alt.length > 0)
+    if(document.stickerAttr && document.stickerAttr.stickerset)
     {
         return YES;
     }
     
-    [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
-        
-        
-        NSArray *serialized = [transaction objectForKey:@"allstickers" inCollection:STICKERS_COLLECTION][@"serialized"];
-        
-        [serialized enumerateObjectsUsingBlock:^(TL_document *ds, NSUInteger idx, BOOL *stop) {
-            
-            
-            if(ds.n_id == document.n_id)
-            {
-                has = YES;
-                *stop = YES;
-            }
-            
-        }];
-        
-        if(!has) {
-            serialized = [transaction objectForKey:@"localStickers" inCollection:STICKERS_COLLECTION];
-            
-            [serialized enumerateObjectsUsingBlock:^(TL_document *ds, NSUInteger idx, BOOL *stop) {
-                
-                
-                if(ds.n_id == document.n_id)
-                {
-                    has = YES;
-                    *stop = YES;
-                }
-            }];
-        }
-        
-        
-    }];
+    
     
     return has;
 }
 
 
 
-+(void)addLocalSticker:(TLDocument *)document {
-    
-    if(![self hasSticker:document]) {
-        [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
-            
-            NSArray *stickers = [transaction objectForKey:@"localStickers" inCollection:STICKERS_COLLECTION];
-            
-            if(!stickers)
-                stickers = @[];
-            
-            stickers = [stickers arrayByAddingObject:document];
-            
-            [transaction setObject:stickers forKey:@"localStickers" inCollection:STICKERS_COLLECTION];
-        }];
+
+
+-(void)mouseDragged:(NSEvent *)theEvent {
+    if(_previewModal != nil) {
+        TGStickerImageView *sticker = (TGStickerImageView *) [self.containerView hitTest:[self.containerView convertPoint:[theEvent locationInWindow] fromView:nil]];
         
-        [EmojiViewController reloadStickers];
+        if(sticker && [sticker isKindOfClass:[TGStickerImageView class]]) {
+            [_previewModal setSticker:sticker.object.reserved1];
+        }
+        
+        
+    } else {
+        [super mouseDragged:theEvent];
     }
+}
+
+-(void)hideStickerPreview {
+    
+    if(_previewModal) {
+        
+        NSEvent *event = [NSApp currentEvent];
+        
+        if(![event.window isKindOfClass:[RBLPopoverWindow class]]) {
+            _notSendUpSticker = YES;
+        }
+    }
+    
+    [_previewModal close:YES];
+    _previewModal = nil;
+    
 }
 
 @end
 
-
-
-/*
- +(void)saveResponse:(NSArray *)packs allSets:(NSArray *)sets currentSet:(TL_stickerSet *)set documents:(NSArray *)documents n_hash:(NSString *)n_hash {
- 
- [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction *transaction) {
- 
- [packs enumerateObjectsUsingBlock:^(TL_stickerPack *pack, NSUInteger idx, BOOL *stop) {
- 
- NSArray *emoticonStickers = [transaction objectForKey:pack.emoticon inCollection:STICKERS_COLLECTION];
- 
- NSMutableArray *packDocuments = [[NSMutableArray alloc] init];
- 
- [emoticonStickers enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- 
- @try {
- TL_document *document = [TLClassStore deserialize:obj];
- 
- [packDocuments addObject:document];
- 
- }
- @catch (NSException *exception) {
- 
- }
- 
- }];
- 
- [pack.documents enumerateObjectsUsingBlock:^(NSNumber *n_id, NSUInteger idx, BOOL *stop) {
- 
- if([packDocuments filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",[n_id longValue]]].count == 0) {
- 
- @try {
- TL_document *document = [documents filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",[n_id longValue]]][0];
- 
- [packDocuments addObject:document];
- }
- @catch (NSException *exception) {
- 
- }
- 
- }
- 
- }];
- 
- NSMutableArray *serialized = [[NSMutableArray alloc] init];
- 
- [packDocuments enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- [serialized addObject:[TLClassStore serialize:obj]];
- }];
- 
- [transaction setObject:serialized forKey:pack.emoticon inCollection:STICKERS_COLLECTION];
- 
- }];
- 
- 
- NSArray *serializedStickers = [transaction objectForKey:@"allstickers" inCollection:STICKERS_COLLECTION][@"serialized"];
- NSArray *serializedSets = [transaction objectForKey:@"allstickers" inCollection:STICKERS_COLLECTION][@"sets"];
- 
- 
- NSMutableArray *allStickers = [[NSMutableArray alloc] init];
- NSMutableArray *allSets = [[NSMutableArray alloc] init];
- 
- 
- 
- [serializedStickers enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- 
- [allStickers addObject:[TLClassStore deserialize:obj]];
- 
- }];
- 
- 
- [serializedSets enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- 
- [allSets addObject:[TLClassStore deserialize:obj]];
- 
- }];
- 
- 
- NSMutableArray *changedSets = [[NSMutableArray alloc] init];
- NSMutableArray *removedSets = [[NSMutableArray alloc] init];
- 
- [allSets enumerateObjectsUsingBlock:^(TL_stickerSet *obj, NSUInteger idx, BOOL *stop) {
- NSArray *current = [sets filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",obj.n_id]];
- 
- if(current.count == 0)
- {
- [removedSets addObject:current];
- }
- }];
- 
- [sets enumerateObjectsUsingBlock:^(TL_stickerSet *obj, NSUInteger idx, BOOL *stop) {
- 
- NSArray *current = [allSets filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",obj.n_id]];
- 
- if(current.count == 0 || [(TL_stickerSet *)current[0] n_hash] != obj.n_hash) {
- 
- [changedSets addObject:obj];
- }
- 
- }];
- 
- NSMutableArray *toremove = [[NSMutableArray alloc] init];
- 
- [allStickers enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- 
- TL_documentAttributeSticker *attr = (TL_documentAttributeSticker *) [obj attributeWithClass:[TL_documentAttributeSticker class]];
- 
- BOOL res = [changedSets filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",attr.stickerset.n_id]].count == 0 && [removedSets filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",attr.stickerset.n_id]].count == 0;
- 
- if(!res)
- {
- [toremove addObject:obj];
- }
- 
- }];
- 
- [allStickers removeObjectsInArray:toremove];
- 
- [documents enumerateObjectsUsingBlock:^(TL_document *obj, NSUInteger idx, BOOL *stop) {
- 
- if([allStickers filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",obj.n_id]].count == 0) {
- [allStickers addObject:obj];
- }
- 
- }];
- 
- 
- 
- NSMutableArray *ser = [[NSMutableArray alloc] init];
- 
- [allStickers enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- 
- [ser addObject:[TLClassStore serialize:obj]];
- 
- }];
- 
- 
- serializedStickers = ser;
- 
- ser = [[NSMutableArray alloc] init];
- 
- [sets enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
- [ser addObject:[TLClassStore serialize:obj]];
- }];
- 
- serializedSets = ser;
- 
- [transaction setObject:@{@"hash":n_hash,@"serialized":serializedStickers,@"sets":serializedSets} forKey:@"allstickers" inCollection:STICKERS_COLLECTION];
- 
- }];
- 
- [ASQueue dispatchOnStageQueue:^{
- dispatch_after_seconds(60*60, ^{
- setRemoteStickersLoaded(NO);
- });
- }];
- 
- 
- }
-
- 
- 
- }
-*/

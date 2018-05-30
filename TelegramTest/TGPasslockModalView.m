@@ -8,7 +8,7 @@
 
 #import "TGPasslockModalView.h"
 #import "TGPasslock.h"
-
+#import "TGCTextView.h"
 @interface TGPasslockModalView ()
 @property (nonatomic,strong) TMAvatarImageView *avatar;
 @property (nonatomic,strong) NSSecureTextField *secureField;
@@ -19,6 +19,9 @@
 @property (nonatomic,assign) int state;
 
 @property (nonatomic,strong) NSMutableArray *md5Hashs;
+
+@property (nonatomic,strong) TGCTextView *textView;
+
 
 
 @end
@@ -73,7 +76,7 @@
         
         [attrs appendString:NSLocalizedString(@"Passcode.EnterPlaceholder", nil) withColor:NSColorFromRGB(0xc8c8c8)];
         
-        [attrs setAttributes:@{NSFontAttributeName:[NSFont fontWithName:@"HelveticaNeue" size:12]} range:attrs.range];
+        [attrs setAttributes:@{NSFontAttributeName:TGSystemFont(12)} range:attrs.range];
         
         [[self.secureField cell] setPlaceholderAttributedString:attrs];
         
@@ -104,7 +107,7 @@
         [self.secureField setAction:@selector(checkPassword)];
         [self.secureField setTarget:self];
         
-        [self.secureField setFont:[NSFont fontWithName:@"HelveticaNeue" size:14]];
+        [self.secureField setFont:TGSystemFont(14)];
         [self.secureField setTextColor:DARK_BLACK];
         
         [self.secureField setFrameOrigin:NSMakePoint(NSMinX(self.secureField.frame), NSMinY(self.avatar.frame) - 100)];
@@ -119,7 +122,7 @@
         [self.descriptionField setSelector:@selector(profileTitle)];
         [self.descriptionField setUser:[UsersManager currentUser]];
         
-        [self.descriptionField setFont:[NSFont fontWithName:@"HelveticaNeue" size:14]];
+        [self.descriptionField setFont:TGSystemFont(14)];
         
         [self.descriptionField setTextColor:DARK_BLACK];
         
@@ -166,7 +169,12 @@
         
         [self.enterButton addBlock:^(BTRControlEvents events) {
             
-            [weakSelf checkPassword];
+            strongWeak();
+            
+            if(strongSelf == weakSelf) {
+                [strongSelf checkPassword];
+            }
+            
             
         } forControlEvents:BTRControlEventClick];
         
@@ -174,6 +182,42 @@
         [self.enterButton setFrameOrigin:NSMakePoint(NSMaxX(self.secureField.frame) + 20, NSMinY(self.secureField.frame) + 3)];
         
         [containerView addSubview:self.enterButton];
+        
+        
+        
+        _textView = [[TGCTextView alloc] init];
+        
+        NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] init];
+        
+        NSString *textFormat =  NSLocalizedString(@"Passcode.forceLogout", nil);
+        
+        NSString *baseText = [[NSString alloc] initWithFormat:textFormat, @"", @""];
+
+        
+        [attr appendString:baseText withColor:GRAY_TEXT_COLOR];
+        
+        
+        NSRange range = NSMakeRange([textFormat rangeOfString:@"%1$@"].location,  [textFormat rangeOfString:@"%2$@"].location - [textFormat rangeOfString:@"%1$@"].location - 4);
+        
+        
+        [attr addAttribute:NSLinkAttributeName value:@"chat://logout" range:range];
+        [attr addAttribute:NSForegroundColorAttributeName value:LINK_COLOR range:range];
+        [attr setAlignment:NSCenterTextAlignment range:attr.range];
+        
+        NSSize size = [attr coreTextSizeForTextFieldForWidth:400];
+        
+        [_textView setAttributedString:attr];
+        [_textView setFrameSize:size];
+        
+        [_textView setFrameOrigin:NSMakePoint(0, 20)];
+
+        _textView.autoresizingMask = NSViewMinXMargin | NSViewMaxXMargin;
+        [_textView setCenteredXByView:self];
+        
+        [_textView setHidden:YES];
+        
+        
+        [self addSubview:_textView];
         
       //  [self updateDescription];
         
@@ -214,6 +258,7 @@
 }
 
 -(void)checkPassword {
+    
     
     NSString *hash = [self.secureField.stringValue md5];
     
@@ -298,12 +343,14 @@
 -(void)setClosable:(BOOL)closable {
     _closable = closable;
     
+    [self.textView setHidden:closable];
+    
     [self.closeButton setHidden:!closable];
 }
 
 -(BOOL)becomeFirstResponder
 {
-    [self.window makeFirstResponder:self.secureField];
+    [self.window makeFirstResponder:self];
     
     return [self.secureField becomeFirstResponder];
 }
@@ -324,6 +371,10 @@
     
 }
 
+-(void)mouseDragged:(NSEvent *)theEvent {
+    
+}
+
 -(void)mouseExited:(NSEvent *)theEvent {
     
 }
@@ -337,6 +388,18 @@
 }
 
 -(void)keyUp:(NSEvent *)theEvent {
+    
+}
+
+-(void)rightMouseDown:(NSEvent *)theEvent {
+    
+}
+
+-(void)rightMouseUp:(NSEvent *)theEvent {
+    
+}
+
+-(void)rightMouseDragged:(NSEvent *)theEvent {
     
 }
 

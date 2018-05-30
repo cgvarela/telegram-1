@@ -20,15 +20,44 @@
 
 static NSMutableDictionary *count;
 
+static TGPVUserBehavior *staticObserver;
+
 -(id)init {
     if(self = [super init]) {
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            count = [[NSMutableDictionary alloc] init];
-        });
+        
     }
     
     return self;
+}
+
++(void)initialize {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        count = [[NSMutableDictionary alloc] init];
+        staticObserver = [[TGPVUserBehavior alloc] init];
+        [Notification addObserver:staticObserver selector:@selector(didAddedPhoto:) name:USER_UPDATE_PHOTO];
+    });
+}
+
+-(void)didAddedPhoto:(NSNotification *)notification {
+    
+    PreviewObject *previewObject = notification.userInfo[KEY_PREVIEW_OBJECT];
+    
+    BOOL previous = [notification.userInfo[KEY_PREVIOUS] boolValue];
+    
+    TLUser *user = notification.userInfo[KEY_USER];
+    
+    
+    [ASQueue dispatchOnStageQueue:^{
+       
+        NSMutableArray *converted = count[@(user.n_id)];
+        
+        if(!previous) {
+            [converted insertObjects:@[previewObject] atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 1)]];
+        }
+        
+    }];
+    
 }
 
 
@@ -40,7 +69,7 @@ static NSMutableDictionary *count;
         
         if(converted.count > 0) {
             
-            if(callback) callback(converted.count > 0 ? [converted subarrayWithRange:NSMakeRange(1, converted.count - 1)] : @[]);
+            if(callback) callback([converted subarrayWithRange:NSMakeRange(1, converted.count - 1)]);
               _state = TGPVMediaBehaviorLoadingStateFull;
             return;
         }
@@ -55,6 +84,8 @@ static NSMutableDictionary *count;
                 TL_photo *photo = response.photos[i];
                 
                 PreviewObject *previewObject = [[PreviewObject alloc] initWithMsdId:[photo n_id] media:[photo.sizes lastObject] peer_id:_user.n_id];
+                
+                previewObject.date = [(TL_photo *)response.photos[response.photos.count - i - 1] date];
                 
                 previewObject.access_hash = photo.access_hash;
                 
@@ -123,8 +154,6 @@ static NSMutableDictionary *count;
 }
 
 
--(BOOL)isReversedContentView {
-    return NO;
-}
+
 
 @end

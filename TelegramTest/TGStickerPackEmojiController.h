@@ -8,12 +8,15 @@
 
 #import "TMView.h"
 #import "TGAllStickersTableView.h"
-
+@class TGModernESGViewController;
 @interface TGStickerPackEmojiController : TMView
 
-
+@property (nonatomic,weak) TGModernESGViewController *esgViewController;
 @property (nonatomic,strong,readonly) TGAllStickersTableView *stickers;
 
+-(instancetype)initWithFrame:(NSRect)frameRect packHeight:(int)packHeight;
+
 -(void)reload;
+-(void)removeAllItems;
 
 @end

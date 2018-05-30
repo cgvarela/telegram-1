@@ -7,6 +7,9 @@
 //
 
 #import <Foundation/Foundation.h>
+
+@class TMTableView;
+
 @protocol TMRowItemDelegate <NSObject>
 
 - (void) redrawRow;
@@ -24,9 +27,20 @@
 
 @interface TMRowItem : NSObject<TMRowItemProtocol>
 
-@property (nonatomic, weak) id table;
+@property (nonatomic, weak) TMTableView *table;
+@property (nonatomic,assign) NSUInteger rowId;
 -(id)initWithObject:(id)object;
 - (void) redrawRow;
 - (NSUInteger)hash;
+
+-(int)height;
+
+
+-(Class)viewClass;
+-(NSString *)identifier;
+
+
+
+@property (nonatomic,assign,getter=isEditable) BOOL editable;
 
 @end

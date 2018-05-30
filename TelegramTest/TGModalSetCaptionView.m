@@ -8,6 +8,9 @@
 
 #import "TGModalSetCaptionView.h"
 #import "TGImageAttachment.h"
+#import "TGModernESGViewController.h"
+#import "NSTextView+EmojiExtension.h"
+#import "TGPopoverHint.h"
 
 @interface TGModalSetCaptionView ()
 -(void)changeResponder;
@@ -17,10 +20,13 @@
 @interface TGAttachCaptionRowItem : TMRowItem<TMGrowingTextViewDelegate>
 @property (nonatomic,strong) TGImageAttachment *attach;
 @property (nonatomic,strong) TGModalSetCaptionView *controller;
+@property (nonatomic,strong) TMGrowingTextView *textView;
 @end
 
 @interface TGAttachCaptionRowView : TMRowView<NSTextViewDelegate>
 @property (nonatomic,strong) TMGrowingTextView *textView;
+@property (nonatomic,strong) BTRButton *emojiButton;
+@property (nonatomic, strong) RBLPopover *popover;
 @end
 
 
@@ -41,6 +47,9 @@
 }
 
 
+- (void) TMGrowingTextViewNeedClose:(id)textView {
+    [_controller mouseUp:nil];
+}
 
 
 - (void) TMGrowingTextViewHeightChanged:(id)textView height:(int)height cleared:(BOOL)isCleared {
@@ -48,13 +57,25 @@
 }
 - (BOOL) TMGrowingTextViewCommandOrControlPressed:(TMGrowingTextView *)textView isCommandPressed:(BOOL)isCommandPressed {
     
-    [_controller changeResponder];
+    BOOL isNeedSend = ([SettingsArchiver checkMaskedSetting:SendEnter] && !isCommandPressed) || ([SettingsArchiver checkMaskedSetting:SendCmdEnter] && isCommandPressed);
+    
+    if(isNeedSend) {
+        if([TGPopoverHint isShown]) {
+            [[TGPopoverHint hintView] performSelected];
+        } else
+            [_controller changeResponder];
+    } else
+    {
+        [_textView insertNewline:nil];
+    }
     
     return YES;
 }
 - (void) TMGrowingTextViewTextDidChange:(TMGrowingTextView *)textView {
     
-    [_attach.item changeCaption:textView.string needSave:NO];
+    
+    
+    [_attach.item changeCaption:_textView.string needSave:NO];
     
 }
 - (void) TMGrowingTextViewFirstResponder:(id)textView isFirstResponder:(BOOL)isFirstResponder {
@@ -76,13 +97,37 @@
         
         _textView = [[TMGrowingTextView alloc] initWithFrame:NSMakeRect(80, 4, NSWidth(frameRect) - 84, NSHeight(frameRect) - 12)];
         
+        _textView.delegate = self;
         
         
-        _textView.containerView.frame = NSMakeRect(80, 4, NSWidth(frameRect) - 84, NSHeight(frameRect) - 9);
+        _textView.containerView.frame = NSMakeRect(75, 4, NSWidth(frameRect) - 79, NSHeight(frameRect) - 9);
         
         _textView.minHeight = _textView.maxHeight = NSHeight(_textView.containerView.frame);
         _textView.limit = 140;
-        [_textView setFont:[NSFont fontWithName:@"HelveticaNeue" size:13]];
+        [_textView setFont:TGSystemFont(13)];
+        
+        
+        _emojiButton = [[BTRButton alloc] initWithFrame:NSMakeRect(_textView.containerView.frame.size.width - image_smile().size.width - 7, NSHeight(_textView.frame) - image_smile().size.height - 5, image_smile().size.width, image_smile().size.height)];
+        [_emojiButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
+        [_emojiButton.layer disableActions];
+        
+        
+        NSImage *smile_h = [image_smile() imageTintedWithColor:BLUE_ICON_COLOR];
+
+        
+        [_emojiButton setBackgroundImage:image_smile() forControlState:BTRControlStateNormal];
+        [_emojiButton setBackgroundImage:smile_h forControlState:BTRControlStateHover];
+        [_emojiButton setBackgroundImage:smile_h forControlState:BTRControlStateHighlighted];
+        [_emojiButton setBackgroundImage:smile_h forControlState:BTRControlStateSelected | BTRControlStateHover];
+        [_emojiButton setBackgroundImage:smile_h forControlState:BTRControlStateSelected];
+        
+        
+        [_emojiButton addTarget:self action:@selector(smileButtonEntered:) forControlEvents:BTRControlEventMouseEntered];
+        [_emojiButton addTarget:self action:@selector(smileButtonClick:) forControlEvents:BTRControlEventClick];
+        [_textView.containerView addSubview:_emojiButton];
+     
+        
+        [_textView setFrameSize:NSMakeSize(NSWidth(_textView.containerView.frame) - 40, NSHeight(_textView.containerView.frame))];
         
     }
     
@@ -91,6 +136,56 @@
 }
 
 
+- (void)textDidChange:(NSNotification *)notification {
+    [_textView textDidChange:notification];
+    
+    [_textView tryShowHintView:[Telegram conversation]];
+}
+
+- (void)smileButtonEntered:(BTRButton *)button {
+    
+    [self smileButtonClick:button];
+}
+
+- (void)smileButtonClick:(BTRButton *)button {
+    
+    
+    TGModernESGViewController *egsViewController = [TGModernESGViewController controller];
+    
+    [egsViewController setMessagesViewController:nil];
+    
+    weak();
+    if(!_popover) {
+        
+        _popover = [[RBLPopover alloc] initWithContentViewController:(NSViewController *)egsViewController];
+        [_popover setHoverView:self.emojiButton];
+        _popover.animates = NO;
+        [_popover setDidCloseBlock:^(RBLPopover *popover){
+            [weakSelf.emojiButton setSelected:NO];
+            [egsViewController close];
+        }];
+        
+    }
+    
+    egsViewController.epopover = _popover;
+    
+    [egsViewController.emojiViewController setInsertEmoji:^(NSString *emoji) {
+        [weakSelf.textView insertText:emoji];
+    }];
+    
+    [_emojiButton setSelected:YES];
+    
+    NSRect frame = _emojiButton.bounds;
+    frame.origin.y += 4;
+    
+    if(!_popover.isShown) {
+        [_popover showRelativeToRect:frame ofView:_emojiButton preferredEdge:CGRectMaxYEdge];
+        [egsViewController show];
+    }
+    
+    
+}
+
 
 -(void)redrawRow {
     
@@ -98,13 +193,15 @@
     
     _textView.growingDelegate = item;
     
+    item.textView = _textView;
+    
     [self removeAllSubviews];
     
     [_textView setString:item.attach.item.caption];
     
     [self addSubview:_textView.containerView];
     
-    [item.attach setFrameOrigin:NSMakePoint(2, 4)];
+    [item.attach setFrameOrigin:NSMakePoint(4, 4)];
     
     [item.attach setDeleteAccept:NO];
     
@@ -353,6 +450,8 @@
 -(void)scrollWheel:(NSEvent *)theEvent {
     
 }
+
+
 
 -(void)keyDown:(NSEvent *)theEvent {
     if(theEvent.keyCode == 53) {

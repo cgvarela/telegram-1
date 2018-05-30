@@ -7,7 +7,8 @@
 //
 
 #import "TMViewController.h"
-
-@interface TGStickersSettingsViewController : TMViewController
-
+#import "ComposeViewController.h"
+#import "TGStickerPackRowItem.h"
+@interface TGStickersSettingsViewController : ComposeViewController
+-(void)removeStickerPack:(TGStickerPackRowItem *)item;
 @end

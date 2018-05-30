@@ -9,15 +9,19 @@
 #import "MessageReplyContainer.h"
 #import "MessageTableItem.h"
 #import "MessageTableElements.h"
-#import "UIImageView+AFNetworking.h"
+#import "TGTextLabel.h"
+#import "TGTimer.h"
 @interface MessageReplyContainer ()
-@property (nonatomic,strong) TMHyperlinkTextField *nameTextField;
+@property (nonatomic,strong) TGTextLabel *nameView;
 
-@property (nonatomic,strong) TMTextField *dateField;
 @property (nonatomic,strong) TGImageView *thumbImageView;
-@property (nonatomic,strong) NSImageView *locationImageView;
 
 @property (nonatomic,strong) NSImageView *deleteImageView;
+@property (nonatomic,strong) TGTextLabel *loadingTextField;
+
+
+@property (nonatomic,strong) TGTimer *editTimer;
+@property (nonatomic,strong) TGTextLabel *editTimerLabel;
 
 
 @end
@@ -29,48 +33,67 @@
 -(id)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
         
-        self.nameTextField = [[TMHyperlinkTextField alloc] initWithFrame:NSMakeRect(15, NSHeight(frameRect) - 13, 200, 20)];
-        [self.nameTextField setBordered:NO];
-        [self.nameTextField setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:13]];
-        [self.nameTextField setDrawsBackground:NO];
+        _loadingTextField = [[TGTextLabel alloc] init];
         
-        [self addSubview:self.nameTextField];
+        static NSMutableAttributedString *loadingAttr;
         
-        self.dateField = [TMTextField defaultTextField];
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            loadingAttr = [[NSMutableAttributedString alloc] init];
+            [loadingAttr appendString:NSLocalizedString(@"Reply.Loading", nil) withColor:TEXT_COLOR];
+            [loadingAttr setFont:TGSystemFont(13) forRange:loadingAttr.range];
+        });
         
-        [self.dateField setTextColor:GRAY_TEXT_COLOR];
-        [self.dateField setFont:[NSFont fontWithName:@"HelveticaNeue" size:12]];
+        [_loadingTextField setText:loadingAttr maxWidth:INT32_MAX];
+        [_loadingTextField setFrameOrigin:NSMakePoint(6, 0)];
         
-       // [self addSubview:self.dateField];
+        self.nameView = [[TGTextLabel alloc] initWithFrame:NSMakeRect(15, NSHeight(frameRect) - 13, 200, 20)];
         
-        _messageField = [[TGCTextView alloc] initWithFrame:NSZeroRect];
+        [self addSubview:self.nameView];
+        
+        _messageField = [[TGTextLabel alloc] initWithFrame:NSZeroRect];
+        
         
         [self.messageField setBackgroundColor:[NSColor whiteColor]];
 
         [self.messageField setFrameOrigin:NSMakePoint(15, 0)];
         
-        
-        
         [self addSubview:self.messageField];
-        
-        
         
         self.thumbImageView = [[TGImageView alloc] initWithFrame:NSMakeRect(5, 1, NSHeight(self.frame) - 2, NSHeight(self.frame) - 2)];
         
-        self.thumbImageView.cornerRadius = 3;
-        
-        self.locationImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(5, 1, NSHeight(self.frame) - 2, NSHeight(self.frame) - 2)];
+        self.thumbImageView.cornerRadius = 4;
         
         [self.thumbImageView setContentMode:BTRViewContentModeCenter];
         
-        self.locationImageView.layer.cornerRadius = 3;
         
         [self update];
+        
+        [Notification addObserver:self selector:@selector(messagTableEditedMessageUpdate:) name:UPDATE_EDITED_MESSAGE];
         
     }
     
     
     return self;
+}
+
+
+
+-(void)messagTableEditedMessageUpdate:(NSNotification *)notification {
+    TL_localMessage *message = notification.userInfo[KEY_MESSAGE];
+    
+    if( self.replyObject.replyMessage.channelMsgId == message.channelMsgId ) {
+        
+        TGReplyObject* nReply = [[TGReplyObject alloc] initWithReplyMessage:message fromMessage:self.replyObject.fromMessage tableItem:self.replyObject.item pinnedMessage:self.replyObject.pinnedMessage];
+        
+        self.replyObject = nReply;
+    }
+}
+
+
+
+-(void)dealloc {
+    [Notification removeObserver:self];
 }
 
 -(void)setDeleteHandler:(dispatch_block_t)deleteHandler {
@@ -81,7 +104,7 @@
 
 -(void)setReplyObject:(TGReplyObject *)replyObject {
     _replyObject = replyObject;
-    
+    _doublePinScrolled = NO;
     [self update];
 }
 
@@ -90,72 +113,66 @@
     
     NSRange range = NSMakeRange(0, 1);
     
-    if(_replyObject.replyHeader.string.length == 0)
-    {
-        return LINK_COLOR;
-    }
+   // if(_replyObject.replyHeader.string.length == 0)
+   // {
+        return BLUE_SEPARATOR_COLOR;
+   // }
     
-    return [_replyObject.replyHeader attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:&range];
+   // return [_replyObject.replyHeader attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:&range];
 }
 
 
+-(int)xOffset {
+    return _replyObject.replyThumb ? _replyObject.replyThumb.imageSize.width + ([MessageTableItem defaultOffset] - 1) *2 : [MessageTableItem defaultOffset]-1;
+}
 
 -(void)update {
     
-   
-    int xOffset = _replyObject.replyThumb || _replyObject.geoURL ? 40 : 5;
     
+    
+    if(_replyObject.replyMessage == nil) {
+        [self addSubview:_loadingTextField];
+    } else {
+        [_loadingTextField removeFromSuperview];
+    }
+   
     
     if(_replyObject.replyThumb) {
         [self addSubview:self.thumbImageView];
         [self.thumbImageView setObject:_replyObject.replyThumb];
+        [self.thumbImageView setFrameSize:_replyObject.replyThumb.imageSize];
     } else {
         [self.thumbImageView removeFromSuperview];
     }
     
-    
-    if(_replyObject.geoURL) {
-        [self addSubview:self.locationImageView];
-        [self.locationImageView setImageWithURL:_replyObject.geoURL];
-        
-    } else {
-        [self.locationImageView removeFromSuperview];
-    }
-  
-    [self.nameTextField setAttributedStringValue:[_replyObject replyHeader]];
-    
-    [self.nameTextField setFrameOrigin:NSMakePoint(xOffset, NSMinY(self.nameTextField.frame))];
-    
 
     
-    [self.messageField setFrameSize:NSMakeSize(NSWidth(self.frame) - NSMinX(self.messageField.frame), self.replyObject.replyHeight)];
+    [_thumbImageView setFrameOrigin:NSMakePoint([MessageTableItem defaultOffset]-1, 1)];
+    
+    [self.nameView setText:[_replyObject replyHeader] maxWidth:NSWidth(self.frame) - self.xOffset height:_replyObject.replyHeaderHeight];
+    
+    
+    
+    
+    [self.messageField setFrameOrigin:NSMakePoint(self.xOffset, 0)];
 
     
-    [self.messageField setAttributedString:_replyObject.replyText];
+   
     
-    
-    [self.messageField setFrameOrigin:NSMakePoint(xOffset + 2, 0)];
-    
-    [_messageField setEditable:_deleteHandler == nil];
     
     if(_deleteHandler != nil)
     {
-        
-        
-        
-        _deleteImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(NSWidth(self.frame) - image_CancelReply().size.width, NSHeight(self.frame) - image_CancelReply().size.height, image_CancelReply().size.width, image_CancelReply().size.height)];
+        _deleteImageView = [[NSImageView alloc] initWithFrame:NSMakeRect(NSWidth(self.frame) - image_CancelReply().size.width, NSHeight(self.frame) - image_CancelReply().size.height, image_CancelReply().size.width , image_CancelReply().size.height )];
         
         _deleteImageView.image = image_CancelReply();
         
-        weak();
-        
-        [_deleteImageView setCallback:^{
-            
-            weakSelf.deleteHandler();
-            
-        }];
+        [_deleteImageView setCallback:_deleteHandler];
         
         [_deleteImageView setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin];
+        
+        if(self.isPinnedMessage) {
+            [_deleteImageView setCenteredYByView:self];
+        }
         
         [self addSubview:_deleteImageView];
     } else {
@@ -165,39 +182,124 @@
     
     [self setNeedsDisplay:YES];
     
+    [self setFrame:self.frame];
+    
+    
+    if(self.replyObject.isEditMessage && self.replyObject.replyMessage.to_id.user_id != [UsersManager currentUserId]) {
+        _editTimerLabel = [[TGTextLabel alloc] init];
+        [self addSubview:_editTimerLabel];
+        [_editTimerLabel setBackgroundColor:self.backgroundColor];
+        
+        weak();
+        
+        _editTimer = [[TGTimer alloc] initWithTimeout:1.0 repeat:YES completion:^{
+            
+            
+            NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] init];
+            
+            int time = MAX( self.replyObject.replyMessage.date + 300 + edit_time_limit() - [[MTNetwork instance] getTime],0);
+            
+            [attr appendString:[NSString durationTransformedValue:time] withColor:GRAY_TEXT_COLOR];
+            
+            [attr setFont:TGSystemFont(13) forRange:attr.range];
+            
+            [_editTimerLabel setText:attr maxWidth:NSWidth(weakSelf.frame) - self.xOffset- 30 - NSWidth(weakSelf.nameView.frame)];
+            
+            [_editTimerLabel setFrameOrigin:NSMakePoint(NSMaxX(weakSelf.nameView.frame) + 8, NSMinY(weakSelf.nameView.frame))];
+            
+            [_editTimerLabel setHidden:time >= 10*60];
+            
+            if(time <= 0) {
+                [weakSelf.editTimer invalidate];
+                weakSelf.editTimer = nil;
+                if(weakSelf.deleteHandler)
+                weakSelf.deleteHandler();
+            }
+            
+            
+        } queue:dispatch_get_current_queue()];
+        
+        [_editTimer start];
+        [_editTimer fire];
+        
+    } else {
+        
+        [_editTimer invalidate];
+        _editTimer =nil;
+        
+        [_editTimerLabel removeFromSuperview];
+        _editTimerLabel = nil;
+    }
+    
 }
 
 -(void)setFrame:(NSRect)frame {
     [super setFrame:frame];
     
-    [self.messageField setFrameSize:NSMakeSize(NSWidth(self.frame) - NSMinX(self.messageField.frame), self.replyObject.replyHeight)];
+    [self.messageField setText:_replyObject.replyText maxWidth:NSWidth(self.frame) - self.xOffset- (_deleteHandler ?  NSWidth(_deleteImageView.frame) +10 : 0) height:_replyObject.replyHeight];
+    [self.nameView setFrameOrigin:NSMakePoint(self.xOffset, NSHeight(self.frame) - NSHeight(_nameView.frame))];
     
-    [self.nameTextField setFrameOrigin:NSMakePoint(NSMinX(self.nameTextField.frame), NSHeight(frame) - 13)];
+    [_loadingTextField setCenteredYByView:self];
 }
 
 -(void)setBackgroundColor:(NSColor *)backgroundColor {
     [super setBackgroundColor:backgroundColor];
     
     [self.messageField setBackgroundColor:backgroundColor];
+    [self.nameView setBackgroundColor:backgroundColor];
+    [self.editTimerLabel setBackgroundColor:backgroundColor];
 }
 
 -(void)mouseUp:(NSEvent *)theEvent {
     
-    if(!_deleteHandler) {
-        
-        // go to message
-        
-        if(_messageField.selectRange.location == NSNotFound) {
-            if([Telegram rightViewController].messagesViewController.state == MessagesViewControllerStateNone)
-                [[Telegram rightViewController].messagesViewController showMessage:_replyObject.replyMessage.n_id fromMsgId:_item.message.n_id];
+    if([self.superview mouse:[self.superview convertPoint:theEvent.locationInWindow fromView:nil] inRect:self.frame]) {
+        if(!_deleteHandler) {
+            if(_item.table.viewController.state == MessagesViewControllerStateNone)
+                [_item.table.viewController showMessage:_replyObject.replyMessage fromMsg:_item.message flags:ShowMessageTypeReply];
+        } else if(self.isPinnedMessage) {
+            if(![self mouse:[self convertPoint:theEvent.locationInWindow fromView:nil] inRect:_deleteImageView.frame])
+                [appWindow().navigationController.messagesViewController showMessage:_replyObject.replyMessage fromMsg:nil flags:ShowMessageTypeReply];
         }
-        
-        
+    }
+    
+}
+
+-(void)_didScrolledTableView:(NSNotification *)notification {
+    _doublePinScrolled = NO;
+    [self removeScrollEvent];
+}
+
+
+-(void)addScrollEvent {
+    id clipView = [[_item.table.viewController.table enclosingScrollView] contentView];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(_didScrolledTableView:)
+                                                 name:NSViewBoundsDidChangeNotification
+                                               object:clipView];
+    
+}
+
+-(void)removeScrollEvent {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+
+-(void)_didChangeBackgroundColorWithAnimation:(POPBasicAnimation *)anim toColor:(NSColor *)color {
+    if(!anim) {
+        _messageField.backgroundColor = color;
+        _nameView.backgroundColor = color;
+    } else {
+        [_messageField pop_addAnimation:anim forKey:@"background"];
+        [_nameView pop_addAnimation:anim forKey:@"background"];
     }
     
 }
 
 -(void)mouseDragged:(NSEvent *)theEvent {
+    
+}
+
+-(void)mouseDown:(NSEvent *)theEvent{
     
 }
 
@@ -209,9 +311,9 @@
     NSRectFill(NSMakeRect(0, 0, 2, NSHeight(self.frame)));
     
     if(_replyObject.replyThumb) {
-        [NSColorFromRGB(0xf3f3f3) set];
+        //[NSColorFromRGB(0xf3f3f3) set];
         
-        NSRectFill(NSMakeRect(NSMinX(self.thumbImageView.frame) - 1, 0, NSWidth(self.thumbImageView.frame) + 2, NSHeight(self.thumbImageView.frame) + 2));
+       // NSRectFill(NSMakeRect(NSMinX(self.thumbImageView.frame) - 1, 0, NSWidth(self.thumbImageView.frame) + 2, NSHeight(self.thumbImageView.frame) + 2));
     }
 
    

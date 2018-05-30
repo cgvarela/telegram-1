@@ -18,7 +18,8 @@
     
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        actions = @[NSStringFromClass([TL_sendMessageTypingAction class]),
+        actions = @[NSStringFromClass([TL_sendMessageCancelAction class]),
+                    NSStringFromClass([TL_sendMessageTypingAction class]),
                     NSStringFromClass([TL_sendMessageUploadPhotoAction class]),
                     
                     NSStringFromClass([TL_sendMessageRecordVideoAction class]),
@@ -30,7 +31,7 @@
                     NSStringFromClass([TL_sendMessageUploadDocumentAction class]),
                     NSStringFromClass([TL_sendMessageGeoLocationAction class]),
                     NSStringFromClass([TL_sendMessageChooseContactAction class]),
-                    
+                    NSStringFromClass([TL_sendMessageGamePlayAction class]),
                     ];
     });
     
@@ -48,11 +49,11 @@
 
 @implementation TGActionTyping
 
--(id)initWithAction:(TLSendMessageAction *)action time:(int)time user_id:(NSUInteger)user_id {
+-(id)initWithAction:(TLSendMessageAction *)action time:(int)time user:(TLUser *)user {
     if(self = [super init]) {
         _action = action;
         _time = time;
-        _user_id = user_id;
+        _user = user;
     }
     
     return self;
@@ -86,16 +87,18 @@
     return self;
 }
 
-- (void) addMember:(NSUInteger)uid withAction:(TLSendMessageAction *)action {
+- (void) addMember:(TLUser *)user withAction:(TLSendMessageAction *)action {
     
-    TGActionTyping *taction = [[TGActionTyping alloc] initWithAction:action time:[[NSDate date] timeIntervalSince1970] + 5 user_id:uid];
+    int time = [[NSDate date] timeIntervalSince1970] + ([action isKindOfClass:[TL_sendMessageGamePlayAction class]] ? 10 : 5);
+    
+    TGActionTyping *taction = [[TGActionTyping alloc] initWithAction:action time:time user:user];
     
     
-    NSMutableDictionary *actions = [self.actions objectForKey:@(uid)];
+    NSMutableDictionary *actions = [self.actions objectForKey:@(user.n_id)];
     if(!actions)
     {
         actions = [[NSMutableDictionary alloc] init];
-        [self.actions setObject:actions forKey:@(uid)];
+        [self.actions setObject:actions forKey:@(user.n_id)];
     }
     
     if(![action isKindOfClass:[TL_sendMessageCancelAction class]]) {
@@ -161,7 +164,7 @@
         }
         
         
-    } queue:[ASQueue globalQueue].nativeQueue];
+    } queue:[ASQueue globalQueue]._dispatch_queue];
     
     [self.timer start];
     
@@ -186,8 +189,9 @@
         
         allObjects = [allObjects sortedArrayUsingSelector:@selector(compare:)];
         
-        
-        [actions addObject:allObjects[0]];
+        if(allObjects.count > 0) {
+            [actions addObject:allObjects[0]];
+        }
         
     }];
     

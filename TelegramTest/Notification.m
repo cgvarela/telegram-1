@@ -19,6 +19,7 @@ NSString *const AUTH_COMPLETE = @"auth_complete";
 NSString *const MESSAGE_SEND_EVENT = @"MESSAGE_SEND_EVENT";
 NSString *const MESSAGE_SENT_EVENT = @"MESSAGE_SENT_EVENT";
 NSString *const MESSAGE_RECEIVE_EVENT = @"MESSAGE_RECEIVE_EVENT";
+NSString *const MESSAGE_UPDATE_MESSAGE_ID = @"MESSAGE_UPDATE_MESSAGE_ID";
 NSString *const MESSAGE_READ_EVENT = @"MESSAGE_READ_EVENT";
 NSString *const MESSAGE_DELETE_EVENT = @"MESSAGE_DELETE_EVENT";
 
@@ -64,6 +65,7 @@ NSString *const KEY_LAST_CONVRESATION_DATA = @"KEY_LAST_CONVRESATION_DATA";
 NSString *const DIALOG_UPDATE = @"DIALOG_UPDATE";
 NSString *const DIALOG_DELETE = @"DIALOG_DELETE";
 NSString *const DIALOG_MOVE_POSITION = @"DIALOG_MOVE_POSITION";
+NSString *const SWAP_DIALOG = @"SWAP_DIALOG";
 
 NSString *const DIALOG_TO_TOP = @"DIALOG_TO_TOP";
 NSString *const DIALOG_CREATE_NEW = @"DIALOG_CREATE_NEW";
@@ -77,15 +79,31 @@ NSString *const CONTACTS_NOT_REGISTRED_READY = @"CONTACTS_NOT_REGISTRED_READY";
 
 NSString *const UPDATE_MESSAGE_ITEM = @"UPDATE_MESSAGE_ITEM";
 
+NSString *const UPDATE_EDITED_MESSAGE = @"UPDATE_EDITED_MESSAGE";
+
+NSString *const ARCHIVE_STICKERS_CHANGED = @"ARCHIVE_STICKERS_CHANGED";
 
 NSString *const UPDATE_WEB_PAGE_ITEMS = @"UPDATE_WEB_PAGE_ITEM";
 NSString *const UPDATE_WEB_PAGES = @"UPDATE_WEB_PAGES";
 NSString *const UPDATE_READ_CONTENTS = @"UPDATE_READ_CONTENTS";
 NSString *const UPDATE_AUDIO_PLAYER_STATE = @"UPDATE_AUDIO_PLAYER_STATE";
-
+NSString *const UPDATE_MESSAGE_ENTITIES = @"UPDATE_MESSAGE_ENTITIES";
+NSString *const UPDATE_MESSAGE_GROUP_HOLE = @"UPDATE_MESSAGE_GROUP";
+NSString *const UPDATE_MESSAGE_VIEWS = @"UPDATE_MESSAGE_VIEWS";
+NSString *const UPDATE_PINNED_MESSAGE = @"UPDATE_PINNED_MESSAGE";
+NSString *const UPDATE_MESSAGE = @"UPDATE_MESSAGE";
 NSString *const UPDATE_NEW_AUTH = @"UPDATE_NEW_AUTH";
-
 NSString *const FULLCHAT_LOADED = @"FULLCHAT_LOADED";
+NSString *const SHOW_ALERT_HINT_VIEW = @"SHOW_ALERT_HINT_VIEW";
+
+NSString *const UPDATE_CONTEXT_SWITCH = @"UPDATE_CONTEXT_SWITCH";
+NSString *const UPDATE_MESSAGE_TEMPLATE = @"UPDATE_MESSAGE_TEMPLATE";
+NSString *const CHAT_FLAGS_UPDATED = @"CHAT_FLAGS_UPDATED";
+NSString *const CONNECTION_STATUS_CHANGED = @"CONNECTION_STATUS_CHANGED";
+
+NSString *const DIALOGS_FLUSH_AND_RELOAD = @"DIALOGS_FLUSH_AND_RELOAD";
+
+
 
 NSString *const KEY_PREVIEW_OBJECT = @"preview_object";
 
@@ -103,6 +121,7 @@ NSString *const KEY_BROADCAST = @"broadcast";
 NSString *const KEY_PHOTO = @"photo";
 NSString *const KEY_MESSAGE_ID_LIST = @"message_id_list";
 NSString *const KEY_MESSAGE_LIST = @"message_list";
+NSString *const KEY_DATA = @"randomdata";
 NSString *const KEY_DIALOG = @"dialog";
 NSString *const KEY_POSITION = @"position";
 NSString *const KEY_DIALOGS = @"dialogs";
@@ -110,9 +129,13 @@ NSString *const KEY_MEDIA = @"media";
 NSString *const KEY_PEER_ID = @"peer_id";
 NSString *const KEY_IS_MUTE = @"is_mute";
 NSString *const KEY_PARTICIPANTS = @"participants";
-
+NSString *const KEY_GROUP_HOLE = @"group_hole";
+NSString *const KEY_MESSAGE_ID = @"KEY_MESSAGE_ID";
+NSString *const KEY_RANDOM_ID = @"KEY_RANDOM_ID";
 NSString *const KEY_WEBPAGE = @"WEBPAGE";
-
+NSString *const KEY_ORDER = @"order";
+NSString *const KEY_STICKERSET = @"sticker_set";
+NSString *const KEY_TEMPLATE = @"template";
 NSString *const LOGOUT_EVENT = @"logout";
 
 NSString *const KEY_PRIVACY = @"key_privacy";
@@ -120,6 +143,11 @@ NSString *const PRIVACY_UPDATE = @"privacy_update";
 
 NSString *const LAYOUT_CHANGED = @"TGAPPLICATIONLAYOUTCHANGED";
 NSString *const UNREAD_COUNT_CHANGED = @"TGUNREADCOUNTCHANGED";
+
+NSString *const STICKERS_REORDER = @"stickers_reoder";
+NSString *const STICKERS_NEW_PACK = @"stickers_new_pack";;
+NSString *const STICKERS_ALL_CHANGED = @"stickers_all_changed";
+
 
 +(NSNotificationCenter *)center {
     static NSNotificationCenter *center;
@@ -146,14 +174,13 @@ NSString *const UNREAD_COUNT_CHANGED = @"TGUNREADCOUNTCHANGED";
 }
 
 
-+(void)perform:(NSString *)name object:(id)object {
-    
-    [[self center] postNotificationNameOnMainThread:name object:object userInfo:object ? @{name:object} : nil];
-}
-
 + (NSString *) notificationNameByDialog:(TL_conversation *)dialog
                                    action:(NSString *) action {
-    return [NSString stringWithFormat:@"%@_%d_%d_%d", action, dialog.type, dialog.peer.chat_id, dialog.peer.user_id];
+    return [NSString stringWithFormat:@"%@_%d_%d", action, dialog.type, dialog.peer_id];
+}
+
++ (NSString *) cAction:(TL_conversation *)convesation action:(NSString *) action {
+    return [self notificationNameByDialog:convesation action:action];
 }
 
 + (NSString *)notificationForUser:(TLUser *)user action:(NSString *)action {
@@ -172,6 +199,20 @@ NSString *const UNREAD_COUNT_CHANGED = @"TGUNREADCOUNTCHANGED";
 
 +(void)perform:(NSString *)name data:(NSDictionary *)data {
     [[self center] postNotificationNameOnMainThread:name object:nil userInfo:data];
+}
+
++(void)perform:(NSString *)name object:(id)object {
+    
+    [[self center] postNotificationNameOnMainThread:name object:object userInfo:object ? @{name:object} : nil];
+}
+
++(void)performOnStageQueue:(NSString *)name object:(id)object {
+    
+    [[self center] postNotificationNameOnStageThread:name object:object userInfo:object ? @{name:object} : nil];
+}
+
++(void)performOnStageQueue:(NSString *)name data:(NSDictionary *)data {
+    [[self center] postNotificationNameOnStageThread:name object:nil userInfo:data];
 }
 
 

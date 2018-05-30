@@ -10,170 +10,30 @@
 #import "GeneralSettingsDescriptionRowItem.h"
 #import "GeneralSettingsBlockHeaderView.h"
 #import "TGImageView.h"
-#import "EmojiViewController.h"
 #import "TGMessagesStickerImageObject.h"
 #import "TGStickerPackModalView.h"
+#import "ComposeActionStickersBehavior.h"
+#import "TGMovableTableView.h"
+#import "TGModernESGViewController.h"
+#import "GeneralSettingsRowItem.h"
+#import "TGFeaturedStickersViewController.h"
+#import "TGArchivedStickersViewController.h"
 
+#import "TGStickerPackRowItem.h"
+#import "TGStickerPackRowView.h"
 
+@interface TGStickersSettingsViewController ()<TGMovableTableDelegate>
+{
+     NSMutableArray *_archivedSets;
+     int _archivedCount;
+}
+@property (nonatomic,strong) TGMovableTableView *tableView;
+@property (nonatomic,assign) BOOL needSaveOrder;
 
-@interface TGStickerPackRowItem : TMRowItem
-@property (nonatomic,strong) NSDictionary *pack;
-@property (nonatomic,strong) NSAttributedString *title;
-@property (nonatomic,strong) TGMessagesStickerImageObject *imageObject;
-@property (nonatomic,strong) TLInputStickerSet *inputSet;
-@property (nonatomic,strong) TL_stickerSet *set;
-@end
-
-
-@interface TGStickerPackRowView : TMRowView
-@property (nonatomic,strong) TMTextField *titleField;
-@property (nonatomic,strong) TGImageView *imageView;
-@property (nonatomic,strong) TMTextButton *removeButton;
-@property (nonatomic,weak) TGStickersSettingsViewController *controller;
-@end
-
-@interface TGStickersSettingsViewController ()<TMTableViewDelegate>
-@property (nonatomic,strong) TMTableView *tableView;
-
-
--(void)removeStickerPack:(TGStickerPackRowItem *)item;
+@property (nonatomic,strong) GeneralSettingsRowItem *archivedItem;
 
 @end
 
-
-@implementation TGStickerPackRowItem
-
--(id)initWithObject:(id)object {
-    if(self = [super initWithObject:object]) {
-        _pack = object;
-        
-        NSMutableAttributedString *attrs = [[NSMutableAttributedString alloc] init];
-        
-        _set = object[@"set"];
-        
-        NSArray *stickers = object[@"stickers"];
-        
-        TL_document *sticker;
-        
-        if(stickers.count > 0)
-        {
-            sticker = stickers[0];
-            
-            TL_documentAttributeSticker *s_attr = (TL_documentAttributeSticker *) [sticker attributeWithClass:[TL_documentAttributeSticker class]];
-            
-            _inputSet = s_attr.stickerset;
-            
-            NSImage *placeholder = [[NSImage alloc] initWithData:sticker.thumb.bytes];
-            
-            if(!placeholder)
-                placeholder = [NSImage imageWithWebpData:sticker.thumb.bytes error:nil];
-            
-            _imageObject = [[TGMessagesStickerImageObject alloc] initWithLocation:sticker.thumb.location placeHolder:placeholder];
-            
-            _imageObject.imageSize = strongsize(NSMakeSize(sticker.thumb.w, sticker.thumb.h), 35);
-        }
-        
-        NSRange range = [attrs appendString:_set.title withColor:TEXT_COLOR];
-        
-        [attrs setFont:TGSystemMediumFont(13) forRange:range];
-        
-        [attrs appendString:@"\n" withColor:[NSColor whiteColor]];
-        
-        range = [attrs appendString:[NSString stringWithFormat:NSLocalizedString(@"Stickers.StickersCount", nil),stickers.count] withColor:GRAY_TEXT_COLOR];
-        
-        [attrs setFont:TGSystemFont(13) forRange:range];
-        
-        _title = attrs;
-        
-    }
-    
-    return self;
-}
-
--(NSUInteger)hash {
-    return [[_pack[@"set"] valueForKey:@"n_id"] longValue];
-}
-
-@end
-
-
-
-@implementation TGStickerPackRowView
-
--(instancetype)initWithFrame:(NSRect)frameRect {
-    if (self = [super initWithFrame:frameRect]) {
-        _titleField = [TMTextField defaultTextField];
-        
-        [[_titleField cell] setTruncatesLastVisibleLine:NO];
-        
-        [self addSubview:_titleField];
-        
-        _imageView = [[TGImageView alloc] initWithFrame:NSMakeRect(0, 0, 35, 35)];
-        
-        [self addSubview:_imageView];
-        
-        _removeButton = [TMTextButton standartUserProfileButtonWithTitle:NSLocalizedString(@"Remove", nil)];
-        
-        [_removeButton setFont:TGSystemFont(14)];
-        [_removeButton setTextColor:BLUE_UI_COLOR];
-        
-        [_removeButton sizeToFit];
-        
-        weak();
-        
-        [_removeButton setTapBlock:^ {
-            
-            [weakSelf.controller removeStickerPack:(TGStickerPackRowItem *)[weakSelf rowItem]];
-            
-        }];
-        
-        [_removeButton setCenterByView:self];
-        [self addSubview:_removeButton];
-
-    }
-    
-    return self;
-}
-
-
--(void)redrawRow {
-    [super redrawRow];
-    
-    TGStickerPackRowItem *item = (TGStickerPackRowItem *) [self rowItem];
-    
-    [_titleField setAttributedStringValue:item.title];
-    
-    [_titleField sizeToFit];
-    
-    [_titleField setCenterByView:self];
-    
-    
-   
-    [_imageView setFrameSize:item.imageObject.imageSize];
-    _imageView.object = item.imageObject;
-    
-    
-    [_removeButton setHidden:(item.set.flags & (1 << 2)) == (1 << 2)];
-    
-}
-
--(void)setFrameSize:(NSSize)newSize {
-    [super setFrameSize:newSize];
-    
-    [_removeButton setFrameOrigin:NSMakePoint(newSize.width - 100 - NSWidth(_removeButton.frame), 17)];
-    [_titleField setFrameOrigin:NSMakePoint(100, 8)];
-    [_imageView setFrameOrigin:NSMakePoint( roundf((50 -NSWidth(_imageView.frame))/2) + 50, 5)];
-}
-
--(void)drawRect:(NSRect)dirtyRect {
-    
-    [DIALOG_BORDER_COLOR setFill];
-    
-    NSRectFill(NSMakeRect(100, 0, NSWidth(dirtyRect) - 200, DIALOG_BORDER_WIDTH));
-    
-}
-
-@end
 
 
 
@@ -186,114 +46,311 @@
     
     [self setCenterBarViewText:NSLocalizedString(@"Sticker.StickerSettings", nil)];
     
-    _tableView = [[TMTableView alloc] initWithFrame:self.view.bounds];
+    _tableView = [[TGMovableTableView alloc] initWithFrame:self.view.bounds];
     
-    [self.view addSubview:_tableView.containerView];
     
-    _tableView.tm_delegate = self;
+    [self.view addSubview:_tableView];
+    
+    _tableView.mdelegate = self;
+    
     
     
 }
 
--(void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
+
+-(void)stickersNeedFullReload:(NSNotification *)notification {
     
-    NSArray *stickers = [EmojiViewController allStickers];
+     [self reload];
+   
+}
+
+-(void)stickersNeedReorder:(NSNotification *)notification {
     
+    [self reload];
+}
+
+-(void)stickersNewPackAdded:(NSNotification *)notification {
+    TL_messages_stickerSet *set = notification.userInfo[KEY_STICKERSET];
     
-    NSMutableDictionary *packs = [[NSMutableDictionary alloc] init];
+    TGStickerPackRowItem *item = [[TGStickerPackRowItem alloc] initWithObject:@{@"set":set.set,@"stickers":set.documents}];
     
-    NSArray *sets = [EmojiViewController allSets];
+    [_tableView insertItem:item atIndex:0];
     
-    [stickers enumerateObjectsUsingBlock:^(TL_document *obj, NSUInteger idx, BOOL *stop) {
+}
+
+
+
+
+-(void)didUpdatedEditableState {
+    [super didUpdatedEditableState];
+    
+    [_tableView enumerateAvailableRowViewsUsingBlock:^(__kindof TMRowView *rowView, TMRowItem *rowItem, NSInteger row) {
         
-        if(obj.class == TL_document.class) {
+        if([rowView isKindOfClass:[TGStickerPackRowView class]]) {
+            TGStickerPackRowView *view = (TGStickerPackRowView *)rowView;
             
-            TL_documentAttributeSticker *attr = (TL_documentAttributeSticker *) [obj attributeWithClass:TL_documentAttributeSticker.class];
+            [rowItem setEditable:self.action.isEditable];
             
-            if(attr) {
-                NSMutableArray *p = [packs objectForKey:@(attr.stickerset.n_id)][@"stickers"];
-                
-                if(!p) {
-                    p = [[NSMutableArray alloc] init];
-                    
-                    NSArray *f = [sets filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.n_id == %ld",attr.stickerset.n_id]];
-                    
-                    id set;
-                    
-                    if(f.count == 1)
-                        set = f[0];
-                    else
-                        set = [TL_stickerSet createWithFlags:4 n_id:0 access_hash:0 title:@"Great Minds" short_name:@"" n_count:0 n_hash:0];
-                    
-                    [packs setObject:@{@"stickers":p,@"set":set} forKey:@(attr.stickerset.n_id)];
-                }
-                
-                [p addObject:obj];
-                
-            }
-            
+            [view setEditable:rowItem.isEditable animated:YES];
         }
+        
     }];
     
-    [self reloadDataWithPacks:packs.allValues];
+}
+
+-(void)saveOrder {
+    NSMutableArray *reoder = [NSMutableArray array];
+    
+    [_tableView enumerateAvailableRowViewsUsingBlock:^(__kindof TMRowView *rowView, TMRowItem *rowItem, NSInteger row) {
+        
+        if([rowView isKindOfClass:[TGStickerPackRowItem class]]) {
+            TGStickerPackRowItem *item = (TGStickerPackRowItem *)rowItem;
+            
+            [reoder addObject:@(item.set.n_id)];
+        }
+        
+        
+    }];
+    
+    [Notification perform:STICKERS_REORDER data:@{KEY_ORDER:reoder}];
+    
+    [RPCRequest sendRequest:[TLAPI_messages_reorderStickerSets createWithFlags:0 order:reoder] successHandler:^(id request, id response) {
+        
+        
+    } errorHandler:^(id request, RpcError *error) {
+        
+        
+        
+    }];
+    
+    _needSaveOrder = NO;
+
+}
+
+-(void)viewWillAppear:(BOOL)animated {
+    
+    if(!self.action)
+        [self setAction:[[ComposeAction alloc] initWithBehaviorClass:[ComposeActionStickersBehavior class]]];
+
+    
+    [super viewWillAppear:animated];
+    
+    _needSaveOrder = NO;
+    
+    [Notification addObserver:self selector:@selector(stickersNeedFullReload:) name:STICKERS_ALL_CHANGED];
+    [Notification addObserver:self selector:@selector(stickersNeedReorder:) name:STICKERS_REORDER];
+    [Notification addObserver:self selector:@selector(stickersNewPackAdded:) name:STICKERS_NEW_PACK];
+    
+    [self reload];
+}
+
+
+-(void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    
+    [Notification removeObserver:self];
+    
+    if(_needSaveOrder) {
+        [self saveOrder];
+    }
+}
+
+-(void)reload {
+    NSMutableArray *packSets = [NSMutableArray array];
+    
+    NSArray *sets = [TGModernESGViewController allSets];
+    
+    
+    [sets enumerateObjectsUsingBlock:^(TL_stickerSet *set, NSUInteger setIdx, BOOL * _Nonnull setStop) {
+        
+        NSArray *stickers = [TGModernESGViewController stickersWithId:set.n_id];
+        if(stickers != nil) {
+            NSDictionary *val = @{@"stickers":stickers,@"set":set};
+            
+            [packSets addObject:val];
+        }
+        
+    }];
+    
+    
+    
+    [self reloadDataWithPacks:packSets];
 }
 
 
 -(void)reloadDataWithPacks:(NSArray *)packs {
     
-    [_tableView removeAllItems:YES];
+    [_tableView removeAllItems];
     
- 
-    [packs enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+    
+    NSMutableArray *items = [[NSMutableArray alloc] init];
+    
+    [items addObject:[[TGGeneralRowItem alloc] initWithHeight:20]];
+    
+    
+    weak();
+    
+    __block NSUInteger nFeaturedSets = 0;
+    __block NSArray *fsets = nil;
+    
+    [[Storage yap] readWriteWithBlock:^(YapDatabaseReadWriteTransaction * _Nonnull transaction) {
         
-        TGStickerPackRowItem *item = [[TGStickerPackRowItem alloc] initWithObject:obj];
+        nFeaturedSets = [[transaction objectForKey:@"featuredUnreadSets" inCollection:STICKERS_COLLECTION] count];
+        fsets = [transaction objectForKey:@"featuredSets" inCollection:STICKERS_COLLECTION];
+    }];
+    
+    if(fsets.count > 0) {
+        [items addObject:[[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNextBadge callback:^(TGGeneralRowItem *item) {
+            
+            TGFeaturedStickersViewController *featured = [[TGFeaturedStickersViewController alloc] init];
+            
+            [weakSelf.navigationViewController pushViewController:featured animated:YES];
+            
+        } description:NSLocalizedString(@"Stickers.Featured", nil) subdesc:nFeaturedSets > 0 ? [NSString stringWithFormat:@"%ld",nFeaturedSets] : nil height:42 stateback:nil]];
+    }
+    
+    
+    
+    TGArchivedStickersViewController *featured = [[TGArchivedStickersViewController alloc] init];
+    
+    _archivedItem = [[GeneralSettingsRowItem alloc] initWithType:SettingsRowItemTypeNext callback:^(TGGeneralRowItem *item) {
         
-        [_tableView insert:item atIndex:_tableView.count tableRedraw:NO];
+        [weakSelf.navigationViewController pushViewController:featured animated:YES];
+        
+        [featured addSets:_archivedSets];
+        
+    } description:NSLocalizedString(@"Stickers.Archived", nil) subdesc:@"" height:42 stateback:nil];
+    
+    _archivedItem.locked = YES;
+    
+    [[featured loadNext:0]  startWithNext:^(TL_messages_archivedStickers *next) {
+        
+        _archivedCount = next.n_count;
+        _archivedSets = next.sets;
+        _archivedItem.locked = NO;
+        [_archivedItem setSubdescString:_archivedCount > 0 ? [NSString stringWithFormat:@"%d",_archivedCount] : @""];
+        [_tableView reloadItem:_archivedItem];
         
     }];
     
+    [items addObject:_archivedItem];
     
-    GeneralSettingsBlockHeaderItem *description = [[GeneralSettingsBlockHeaderItem alloc] initWithObject:NSLocalizedString(@"Stickers.StickersSetDescription", nil)];
+    [items addObject:[[TGGeneralRowItem alloc] initWithHeight:20]];
+
     
-    description.isFlipped = YES;
-    description.height = 150;
     
-    [_tableView insert:description atIndex:_tableView.count tableRedraw:NO];
+   
     
-    [_tableView reloadData];
+    
+    [packs enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+        
+        TGStickerPackRowItem *item = [[TGStickerPackRowItem alloc] initWithObject:obj];
+        item.editable = self.action.isEditable;
+        [items addObject:item];
+        
+    }];
+    
+    [self insertPart:items];
+    
+    
+}
+
+-(void)insertPart:(NSMutableArray *)packs {
+    
+    NSArray *current = [packs subarrayWithRange:NSMakeRange(0, MIN(20,packs.count))];
+                                                        
+    [packs removeObjectsInArray:current];
+    
+    [current enumerateObjectsUsingBlock:^(TGStickerPackRowItem *obj, NSUInteger idx, BOOL *stop) {
+        
+        obj.editable = self.action.isEditable;
+        
+    }];
+    
+    [_tableView addItems:current];
+    
+    if(packs.count == 0) {
+        [_tableView addItems:@[[[TGGeneralRowItem alloc] initWithHeight:20]]];
+        [_tableView addItems:@[[[GeneralSettingsBlockHeaderItem alloc] initWithString:NSLocalizedString(@"Stickers.ArtistDesc", nil) flipped:YES]]];
+
+    }
+    
+    if(packs.count > 0) {
+        dispatch_after_seconds(0.2, ^{
+            [self insertPart:packs];
+        });
+    }
     
 }
 
 -(void)removeStickerPack:(TGStickerPackRowItem *)item {
     
-    confirm(appName(), [NSString stringWithFormat:NSLocalizedString(@"Stickers.RemoveStickerAlert", nil),[item.pack[@"set"] title]], ^{
-        
-        [self showModalProgress];
-        
-        [RPCRequest sendRequest:[TLAPI_messages_uninstallStickerSet createWithStickerset:item.inputSet] successHandler:^(id request, id response) {
-            
-            _tableView.defaultAnimation = NSTableViewAnimationEffectFade;
-            
-            [_tableView removeItem:item];
-            
-            _tableView.defaultAnimation = NSTableViewAnimationEffectNone;
-            
-            [EmojiViewController reloadStickers];
-            
-            [self hideModalProgress];
-            
-        } errorHandler:^(id request, RpcError *error) {
-            [self hideModalProgress];
-        } timeout:10];
-        
-    }, nil);
+    BOOL isDefPack = (item.set.flags & (1 << 2)) == (1 << 2);
     
+    NSAlert *alert = [NSAlert alertWithMessageText:appName() informativeText:[NSString stringWithFormat:NSLocalizedString(isDefPack ? @"Stickers.ArchiveAlert" : @"Stickers.RemoveOrArchive", nil),item.set.title] block:^(id result) {
+        if([result intValue] == 1000 && !isDefPack)
+        {
+            [self showModalProgress];
+            
+            [RPCRequest sendRequest:[TLAPI_messages_uninstallStickerSet createWithStickerset:item.inputSet] successHandler:^(id request, id response) {
+                
+                [_tableView removeItemAtIndex:[_tableView indexOfObject:item] animated:YES];
+                
+                [TGModernESGViewController reloadStickers];
+                
+                [self hideModalProgress];
+                
+            } errorHandler:^(id request, RpcError *error) {
+                [self hideModalProgress];
+            } timeout:10];
+        }
+        else if(([result intValue] == 1001 && !isDefPack) || ([result intValue] == 1000 && isDefPack)) {
+            [self showModalProgress];
+            
+            [RPCRequest sendRequest:[TLAPI_messages_installStickerSet createWithStickerset:item.inputSet archived:YES] successHandler:^(id request, id response) {
+                
+                [_tableView removeItemAtIndex:[_tableView indexOfObject:item] animated:YES];
+                
+                [TGModernESGViewController reloadStickers];
+                
+                
+                [_archivedSets insertObject:[TL_stickerSetCovered createWithSet:item.set cover:[item.stickers firstObject]] atIndex:0];
+                
+                [_archivedItem setSubdescString:++_archivedCount > 0 ? [NSString stringWithFormat:@"%d",_archivedCount] : @""];
+                [_tableView reloadItem:_archivedItem];
+                
+                [self hideModalProgress];
+                
+            } errorHandler:^(id request, RpcError *error) {
+                [self hideModalProgress];
+            } timeout:10];
+        } else {
+            
+        }
+        
+    }];
+    
+    if(isDefPack) {
+        [alert addButtonWithTitle:NSLocalizedString(@"Stickers.Archive", nil)];
+        [alert addButtonWithTitle:NSLocalizedString(@"Cancel", nil)];
+    } else {
+        [alert addButtonWithTitle:NSLocalizedString(@"Stickers.Remove", nil)];
+        [alert addButtonWithTitle:NSLocalizedString(@"Stickers.Archive", nil)];
+        [alert addButtonWithTitle:NSLocalizedString(@"Cancel", nil)];
+    }
+    
+    [alert show];
 }
 
 
+-(void)tableViewDidChangeOrder {
+    
+    
+    _needSaveOrder = YES;
+}
+
 - (CGFloat)rowHeight:(NSUInteger)row item:(TMRowItem *) item {
-    return  [item isKindOfClass:[GeneralSettingsBlockHeaderItem class]] ? ((GeneralSettingsBlockHeaderItem *)item).height : 50;
+    return  item.height;
 }
 
 - (BOOL)isGroupRow:(NSUInteger)row item:(TMRowItem *) item {
@@ -302,13 +359,19 @@
 
 - (TMRowView *)viewForRow:(NSUInteger)row item:(TMRowItem *) item {
     
-    if([item isKindOfClass:[GeneralSettingsBlockHeaderItem class]]) {
-        return [self.tableView cacheViewForClass:[GeneralSettingsBlockHeaderView class] identifier:@"GeneralSettingsBlockHeaderView"];
+    
+
+    
+    TMRowView *view = [[item.viewClass alloc] initWithFrame:NSZeroRect];
+    
+    if([item respondsToSelector:@selector(updateItemHeightWithWidth:)]) {
+        [(TGGeneralRowItem *)item updateItemHeightWithWidth:NSWidth(self.view.frame)];
     }
     
-    TGStickerPackRowView *view = (TGStickerPackRowView *)[_tableView cacheViewForClass:[TGStickerPackRowView class] identifier:@"TGStickerPackRowView" withSize:NSMakeSize(NSWidth(self.view.frame), 42)];
+    if([view isKindOfClass:[TGStickerPackRowView class]]) {
+        ((TGStickerPackRowView *)view).controller = self;
+    }
     
-    view.controller = self;
     
     return view;
 }
@@ -316,13 +379,12 @@
 - (void)selectionDidChange:(NSInteger)row item:(TGStickerPackRowItem *) item {
     
     if([item isKindOfClass:[TGStickerPackRowItem class]]) {
-        TGStickerPackModalView *modalView = [[TGStickerPackModalView alloc] init];
         
-        
-        
-        [modalView setStickerPack:[TL_messages_stickerSet createWithSet:item.pack[@"set"] packs:nil documents:[item.pack[@"stickers"] mutableCopy]]];
-        
-        [modalView show:self.view.window animated:YES];
+        [[TGModernESGViewController stickersSignal:item.set] startWithNext:^(id next) {
+            TGStickerPackModalView *modalView = [[TGStickerPackModalView alloc] init];
+
+            [modalView show:self.view.window animated:YES stickerPack:[TL_messages_stickerSet createWithSet:item.pack[@"set"] packs:nil documents:next] messagesController:appWindow().navigationController.messagesViewController];
+        }];
     }
     
 }

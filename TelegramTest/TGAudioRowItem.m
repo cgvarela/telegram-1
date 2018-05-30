@@ -19,7 +19,7 @@
 -(void)_didDownloadImage:(DownloadItem *)item {
     NSImage *image = [[NSImage alloc] initWithData:item.result];
         
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self.delegate didDownloadImage:image object:self];
     }];
 }
@@ -46,9 +46,7 @@
             _imageObject.imageSize = image_MusicStandartCover().size;
         
         }
-        
-        
-        
+  
     }
     
     return self;
@@ -56,6 +54,11 @@
 
 -(MessageTableItemAudioDocument *)document {
     return _documentItem;
+}
+
+-(void)performLoadImageObject {
+    if(![TGCache cachedImage:_imageObject.cacheKey])
+        [_imageObject initDownloadItem];
 }
 
 -(NSString *)trackName {

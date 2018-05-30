@@ -10,6 +10,13 @@
 
 @interface TGStickerPackModalView : TGModalView
 
--(void)setStickerPack:(TL_messages_stickerSet *)stickerPack;
+@property (nonatomic,assign) BOOL canSendSticker;
+
+@property (nonatomic,weak) MessagesViewController *messagesViewController;
+
+-(void)show:(NSWindow *)window animated:(BOOL)animated stickerPack:(TL_messages_stickerSet *)pack messagesController:(MessagesViewController *)messagesViewController;
+
+
+@property (nonatomic,copy) dispatch_block_t addcallback;
 
 @end

@@ -25,7 +25,7 @@
 @property (nonatomic,assign,setter=setEditable:) BOOL isEditable;
 
 @property (nonatomic,assign,readonly) NSRange selectRange;
-
+@property (nonatomic,assign) BOOL disableLinks;
 
 @property (nonatomic,strong) NSColor *selectColor;
 @property (nonatomic,strong) NSColor *backgroundColor;
@@ -45,12 +45,18 @@
 -(BOOL)indexIsSelected:(int)index;
 
 
+-(void)open_link:(NSString *)link itsReal:(BOOL)itsReal;
 
+@property (nonatomic,copy) void (^linkCallback)(NSString *link);
+
+@property (nonatomic,copy) void (^linkOver)(NSString *link, BOOL over,NSRect rect,TGCTextView *textView);
 
 
 // its private not for use
 -(BOOL)_checkClickCount:(NSEvent *)theEvent;
 
 -(BOOL)mouseInText:(NSEvent *)theEvent;
+
+-(void)_mouseDown:(NSEvent *)theEvent;
 
 @end

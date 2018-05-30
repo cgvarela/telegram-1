@@ -10,6 +10,13 @@
 #import "SenderItem.h"
 #import "MessageTableItem.h"
 #import "StickerSenderItem.h"
+#import "WeakReference.h"
+#import "MessageTableCell.h"
+#import "ExternalGifSenderItem.h"
+#import "CompressedDocumentSenderItem.h"
+#import "ContextBotSenderItem.h"
+#import "StickerSecretSenderItem.h"
+#import "InlineBotMediaSecretSenderItem.h"
 @interface SenderItem ()
 @property (nonatomic,strong) NSMutableArray *listeners;
 @end
@@ -25,14 +32,14 @@ static NSMutableDictionary *senders;
     return self;
 }
 
-- (id)initWithPath:(NSString *)path_for_file forConversation:(TL_conversation *)conversation {
+- (id)initWithPath:(NSString *)path_for_file forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags {
     if(self = [super init]) {
         [NSException raise:@"Fatal sending error" format:@"Can't use (%@) this class class for send message with file path",NSStringFromClass([self class])];
     }
     return self;
 }
 
-- (id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation  {
+- (id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags  {
     if(self = [super init]) {
         [NSException raise:@"Fatal sending error" format:@"Can't use (%@) this class class for send message with file path",NSStringFromClass([self class])];
     }
@@ -54,9 +61,6 @@ static NSMutableDictionary *senders;
     if(self = [super init]) {
         self.state = MessageStateWaitSend;
         self.listeners = [[NSMutableArray alloc] init];
-        
-        
-        
     }
     
     return self;
@@ -65,11 +69,15 @@ static NSMutableDictionary *senders;
 -(void)setMessage:(TL_localMessage *)message {
     _message = message;
     
-    [ASQueue dispatchOnStageQueue:^{
-        
-        senders[@(_message.randomId)] = self;
-        
-    }];
+    if(message) {
+        [ASQueue dispatchOnStageQueue:^{
+            
+            senders[@(_message.randomId)] = self;
+            
+        }];
+
+    }
+    
 }
 
 + (id)senderForMessage:(TL_localMessage *)msg {
@@ -80,15 +88,16 @@ static NSMutableDictionary *senders;
         
         item = senders[@(msg.randomId)];
         
+        
         if(!item) {
             if(![msg isKindOfClass:[TL_destructMessage class]]) {
-                if([msg.media isKindOfClass:[TL_messageMediaEmpty class]]) {
+                if([msg.media isKindOfClass:[TL_messageMediaEmpty class]] || msg.media == nil) {
                     item = [[MessageSenderItem alloc] init];
                 } else if([msg.media isKindOfClass:[TL_messageMediaPhoto class]]) {
                     item = [[ImageSenderItem alloc] init];
                 } else if([msg.media isKindOfClass:[TL_messageMediaVideo class]]) {
                     item = [[VideoSenderItem alloc] init];
-                } else if([msg.media isKindOfClass:[TL_messageMediaDocument class]]) {
+                } else if([msg.media isKindOfClass:[TL_messageMediaDocument class]] || [msg.media isKindOfClass:[TL_messageMediaDocument_old44 class]]) {
                     
                     item = [[DocumentSenderItem alloc] init];
                     
@@ -96,36 +105,47 @@ static NSMutableDictionary *senders;
                         item = [[StickerSenderItem alloc] init];
                     }
                     
+                    if(msg.media.document.access_hash != 0) {
+                        item = [[ExternalGifSenderItem alloc] init];
+                    }
                     
+                    if([msg.media.document isKindOfClass:[TL_compressDocument class]]) {
+                        item = [[CompressedDocumentSenderItem alloc] init];
+                    }
                     
-                } else if([msg.media isKindOfClass:[TL_messageMediaAudio class]]) {
+                } else if(msg.media.document.audioAttr.isVoice) {
                     item = [[AudioSenderItem alloc] init];
                 } else if([msg.media isKindOfClass:[TL_messageMediaContact class]]) {
                     item = [[ShareContactSenterItem alloc] init];
+                } else if([msg.media isKindOfClass:[TL_messageMediaBotResult class]]) {
+                    item = [[ContextBotSenderItem alloc] init];
                 }
                 
-                if(msg.fwd_from_id != 0) {
+                if(msg.fwd_from != 0) {
                     item = [[ForwardSenterItem alloc] init];
                     
                     ((ForwardSenterItem *)item).fakes = @[msg];
-                    ((ForwardSenterItem *)item).msg_ids = [NSMutableArray arrayWithObject:@([msg n_id])];
+                    ((ForwardSenterItem *)item).msg_ids = [NSMutableArray arrayWithObject:@([msg fakeId])];
                 }
                 
             } else {
-                if(msg.class == [TL_destructMessage class]) {
-                    if([msg.media isKindOfClass:[TL_messageMediaEmpty class]])
+                if([msg isKindOfClass:[TL_destructMessage class]]) {
+                    if([msg.media isKindOfClass:[TL_messageMediaEmpty class]] || msg.media == nil)
                         item = [[MessageSenderSecretItem alloc] init];
                     else {
                         
-                        item = [[FileSecretSenderItem alloc] init];
                         
-                        if([msg.media isKindOfClass:[TL_messageMediaPhoto class]]) {
+                        item = [msg.media isKindOfClass:[TL_messageMediaBotResult class]] ? [[InlineBotMediaSecretSenderItem alloc] init] : [[FileSecretSenderItem alloc] init];
+                        
+                        if([msg.media isKindOfClass:[TL_messageMediaDocument class]] && msg.media.document.access_hash != 0 && [msg.media.document isSticker]) {
+                            item = [[StickerSecretSenderItem alloc] init];
+                        } else if([msg.media isKindOfClass:[TL_messageMediaPhoto class]]) {
                             [(FileSecretSenderItem *)item setUploaderType:UploadImageType];
                         } else if([msg.media isKindOfClass:[TL_messageMediaVideo class]]) {
                             [(FileSecretSenderItem *)item setUploaderType:UploadVideoType];
-                        } else if([msg.media isKindOfClass:[TL_messageMediaDocument class]]) {
+                        } else if([msg.media isKindOfClass:[TL_messageMediaDocument class]] || [msg.media isKindOfClass:[TL_messageMediaDocument_old44 class]]) {
                             [(FileSecretSenderItem *)item setUploaderType:UploadDocumentType];
-                        } else if([msg.media isKindOfClass:[TL_messageMediaAudio class]]) {
+                        } else if(msg.media.document.audioAttr.isVoice) {
                             [(FileSecretSenderItem *)item setUploaderType:UploadAudioType];
                         }
                     }
@@ -134,16 +154,12 @@ static NSMutableDictionary *senders;
                 
             }
             
-            
-            item.conversation = msg.conversation;
             item.message = msg;
-            
+            item.conversation = msg.conversation;
             item.state = msg.dstate == DeliveryStateError ? MessageSendingStateError : MessageStateWaitSend;
         }
         
     } synchronous:YES];
-    
-    
     
     return item;
 }
@@ -164,42 +180,45 @@ static NSMutableArray *waiting;
     self->_state = state;
     
     
-    [ASQueue dispatchOnStageQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self notifyAllListeners:@selector(onStateChanged:)];
         
         if(state == MessageSendingStateSent || state == MessageSendingStateError || state == MessageSendingStateCancelled) {
             [self removeAllListeners];
-            self.rpc_request = nil;
             
-            
-            if(state == MessageSendingStateError) {
-                if(self.message.dstate != DeliveryStateError) {
-                    self.message.dstate = DeliveryStateError;
-                    [self.message save:YES];
+            [ASQueue dispatchOnStageQueue:^{
+                self.rpc_request = nil;
+                
+                
+                if(state == MessageSendingStateError) {
+                    if(self.message.dstate != DeliveryStateError) {
+                        self.message.dstate = DeliveryStateError;
+                        [self.message save:YES];
+                    }
+                    
+                    
+                    if([self isKindOfClass:[ForwardSenterItem class]]) {
+                        ForwardSenterItem *sender = (ForwardSenterItem *) self;
+                        [sender.fakes enumerateObjectsUsingBlock:^(TL_localMessage *obj, NSUInteger idx, BOOL *stop) {
+                            if(obj.dstate != DeliveryStateError) {
+                                obj.dstate = DeliveryStateError;
+                                [obj save:idx == sender.fakes.count-1];
+                            }
+                        }];
+                    }
                 }
                 
                 
-                if([self isKindOfClass:[ForwardSenterItem class]]) {
-                    ForwardSenterItem *sender = (ForwardSenterItem *) self;
-                    [sender.fakes enumerateObjectsUsingBlock:^(TL_localMessage *obj, NSUInteger idx, BOOL *stop) {
-                        if(obj.dstate != DeliveryStateError) {
-                            obj.dstate = DeliveryStateError;
-                            [obj save:idx == sender.fakes.count-1];
-                        }
-                    }];
+                if(state == MessageSendingStateError && self.conversation.type == DialogTypeSecretChat) {
+                    if(self.rpc_request.error.error_code == 400) {
+                        EncryptedParams *params = [EncryptedParams findAndCreate:self.conversation.peer.peer_id];
+                        
+                        [params setState:EncryptedDiscarted];
+                        
+                        [params save];
+                    }
                 }
-            }
-            
-            
-            if(state == MessageSendingStateError && self.conversation.type == DialogTypeSecretChat) {
-                if(self.rpc_request.error.error_code == 400) {
-                    EncryptedParams *params = [EncryptedParams findAndCreate:self.conversation.peer.peer_id];
-                    
-                    [params setState:EncryptedDiscarted];
-                    
-                    [params save];
-                }
-            }
+            }];
         }
         
         
@@ -210,6 +229,7 @@ static NSMutableArray *waiting;
             
             if(state == MessageSendingStateSent || state == MessageSendingStateCancelled) {
                 [waiting removeObject:self];
+                [senders removeObjectForKey:@(_message.randomId)];
             }
 
         }];
@@ -261,56 +281,95 @@ static NSMutableArray *waiting;
 
 -(void)setProgress:(float)progress {
     self->_progress = progress;
-    [ASQueue dispatchOnStageQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self notifyAllListeners:@selector(onProgressChanged:)];
     }];
     
 }
 
 -(void)notifyAllListeners:(SEL)selector {
-    NSArray *copy = [self.listeners copy];
-    for (id<SenderListener> current in copy) {
-        if([current respondsToSelector:selector])
-            [current performSelector:selector withObject:self];
-    }
+    
+    assert([NSThread isMainThread]);
+    
+    weak();
+    
+    [_listeners enumerateObjectsUsingBlock:^(WeakReference *current, NSUInteger idx, BOOL * _Nonnull stop) {
+        id<SenderListener>listener = current.nonretainedObjectValue;
+        
+        if([listener respondsToSelector:selector])
+            [listener performSelector:selector withObject:weakSelf];
+    }];
+    
+
 }
 
--(void)setTableItem:(MessageTableItem *)tableItem {
-    self->_tableItem = tableItem;
-    tableItem.messageSender = self;
+
+-(NSUInteger)indexOfListener:(id<SenderListener>)listener {
+    
+    
+    assert([NSThread isMainThread]);
+    __block NSUInteger index = NSNotFound;
+    
+    [_listeners enumerateObjectsUsingBlock:^(WeakReference *obj, NSUInteger idx, BOOL *stop) {
+        
+        if(obj.nonretainedObjectValue == (__bridge void *)(listener)) {
+            index = idx;
+            *stop = YES;
+        }
+        
+    }];
+    
+    return index;
 }
 
 
 -(void)addEventListener:(id<SenderListener>)listener {
-     [ASQueue dispatchOnStageQueue:^{
+     [ASQueue dispatchOnMainQueue:^{
          if(!self.listeners)
              self.listeners = [[NSMutableArray alloc] init];
-         if([self.listeners indexOfObject:listener] == NSNotFound)
-             [self.listeners addObject:listener];
+         if([self indexOfListener:listener] == NSNotFound)
+             [self.listeners addObject:[WeakReference weakReferenceWithObject:listener]];
          
          [self notifyAllListeners:@selector(onAddedListener:)];
      }];
 }
 
 -(void)enumerateEventListeners:(void (^)(id<SenderListener> listener, NSUInteger idx, BOOL *stop))enumerator {
-    [ASQueue dispatchOnStageQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         NSArray *copy = [self.listeners copy];
         
-        [copy enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
-            enumerator(obj,idx,stop);
+        [copy enumerateObjectsUsingBlock:^(WeakReference *obj, NSUInteger idx, BOOL *stop) {
+            enumerator(obj.nonretainedObjectValue,idx,stop);
         }];
     }];
 }
 
 -(void)removeAllListeners {
-    [self notifyAllListeners:@selector(onRemovedListener:)];
     
-    [self.listeners removeAllObjects];
+    assert([NSThread isMainThread]);
+    
+    NSArray *copy = [_listeners copy];
+    
+    [_listeners removeAllObjects];
+    
+    weak();
+    
+    [copy enumerateObjectsUsingBlock:^(WeakReference *current, NSUInteger idx, BOOL * _Nonnull stop) {
+        id<SenderListener>listener = current.nonretainedObjectValue;
+        
+        if([listener respondsToSelector:@selector(onRemovedListener:)])
+            [listener performSelector:@selector(onRemovedListener:) withObject:weakSelf];
+    }]; 
+    
 }
 
 -(void)removeEventListener:(id<SenderListener>)listener {
-     [ASQueue dispatchOnStageQueue:^{
-         [self.listeners removeObject:listener];
+     [ASQueue dispatchOnMainQueue:^{
+         
+         NSUInteger idx = [self indexOfListener:listener];
+         
+         if(idx != NSNotFound)
+             [self.listeners removeObjectAtIndex:idx];
          
          [self notifyAllListeners:@selector(onRemovedListener:)];
          
@@ -334,14 +393,7 @@ static NSMutableArray *waiting;
 }
 
 
--(void)dealloc {
-    [self removeAllListeners];
-    
-    [ASQueue dispatchOnStageQueue:^{
-        [senders removeObjectForKey:@(_message.randomId)];
-    } synchronous:YES];
-    
-}
+
 
 
 -(void)perform {
@@ -376,4 +428,80 @@ static NSMutableArray *waiting;
 -(void)resend {
     
 }
+
+-(void)updateMessageId:(TLUpdates *)updates {
+    
+    if([updates isKindOfClass:[TL_updates class]]) {
+        NSArray *updateMessageIdUpdate = [[updates updates] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.className == %@",NSStringFromClass([TL_updateMessageID class])]];
+        
+        if(updateMessageIdUpdate.count > 0) {
+            self.message.n_id = [(TL_updateMessageID *)updateMessageIdUpdate[0] n_id];
+        }
+    }
+    
+}
+
+-(int)senderFlags {
+    int flags = 0;
+    
+    flags|= self.message.reply_to_msg_id != 0 ? 1 : 0;
+    
+    flags|=[self.message.media.webpage isKindOfClass:[TL_webPageEmpty class]] ? 2 : 0;
+    
+    flags|=self.message.isPost ? 1 << 4 : 0;
+    
+    if(self.conversation.notify_settings.flags & PushEventMaskDisableChannelMessageNotification) {
+        flags|= 1 << 5;
+    }
+    
+    if(self.message.entities.count > 0)
+        flags|= 1 << 3;
+    
+    return flags;
+}
+
+-(TL_updateNewMessage *)updateNewMessageWithUpdates:(TLUpdates *)updates {
+    
+    __block id update;
+    
+    [updates.updates enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
+        
+        if([obj isKindOfClass:[TL_updateNewMessage class]] || [obj isKindOfClass:[TL_updateNewChannelMessage class]]) {
+            update = obj;
+            *stop = YES;
+        } 
+        
+    }];
+    
+    return update;
+    
+}
+
+-(BOOL)canRelease {
+    
+    __block BOOL c = YES;
+    
+    [ASQueue dispatchOnMainQueue:^{
+        
+        [_listeners enumerateObjectsUsingBlock:^(WeakReference *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            if([obj.nonretainedObjectValue isKindOfClass:[MessageTableCell class]]) {
+                c = NO;
+                *stop = YES;
+            }
+        }];
+        
+        c = _listeners.count == 0;
+    } synchronous:YES];
+    
+    return c;
+}
+
+
+
+
+-(void)dealloc {
+    
+}
+
+
 @end

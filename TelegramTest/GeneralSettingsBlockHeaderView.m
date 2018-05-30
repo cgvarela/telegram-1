@@ -7,37 +7,100 @@
 //
 
 #import "GeneralSettingsBlockHeaderView.h"
-
+#import "NSAttributedString+Hyperlink.h"
+#import "TMHyperlinkTextField.h"
 @interface GeneralSettingsBlockHeaderItem ()
-@property (nonatomic,assign,readonly) int rand;
+
 @end
 
 @implementation GeneralSettingsBlockHeaderItem
 
--(id)initWithObject:(id)object {
-    if(self = [super initWithObject:object]) {
+
+-(id)initWithString:(NSString *)header flipped:(BOOL)flipped {
+    if(self = [self initWithString:header height:0 flipped:flipped]) {
+        _autoHeight = YES;
         
-        NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] init];
-        
-        [attr appendString:object withColor:GRAY_TEXT_COLOR];
-        [attr setFont:[NSFont fontWithName:@"HelveticaNeue" size:12] forRange:attr.range];
-        
-        _header = attr;
-        _rand = arc4random();
+    }
+    return self;
+}
+
+
+-(id)initWithString:(NSString *)header height:(int)height flipped:(BOOL)flipped {
+    if(self = [super init]) {
+       
+        [self updateWithString:header];
+        self.height = height;
+        _isFlipped = flipped;
+        self.drawsSeparator = NO;
     }
     
     return self;
 }
 
--(NSUInteger)hash {
-    return _rand;
+-(void)updateWithString:(NSString *)string {
+    NSMutableAttributedString *attr = [[NSMutableAttributedString alloc] init];
+    
+    [attr appendString:string withColor:GRAY_TEXT_COLOR];
+    [attr setFont:TGSystemFont(12) forRange:attr.range];
+    [attr detectBoldColorInStringWithFont:TGSystemMediumFont(12)];
+    [attr detectAndAddLinks:URLFindTypeAll];
+    _header = attr;
 }
+
+-(void)setAligment:(NSTextAlignment)aligment {
+    NSMutableAttributedString *attr = [_header mutableCopy];
+    
+    [attr setAlignment:aligment range:attr.range];
+    
+    _header = attr;
+}
+
+-(void)setParagraph:(NSParagraphStyle *)paragraph {
+    NSMutableAttributedString *attr = [_header mutableCopy];
+    
+    [attr addAttribute:NSParagraphStyleAttributeName value:paragraph range:attr.range];
+    
+    _header = attr;
+}
+
+-(void)setTextColor:(NSColor *)textColor {
+    NSMutableAttributedString *attr = [_header mutableCopy];
+    
+    [attr addAttribute:NSForegroundColorAttributeName value:textColor range:attr.range];
+    
+    _header = attr;
+}
+
+-(void)setFont:(NSFont *)font {
+    NSMutableAttributedString *attr = [_header mutableCopy];
+    
+    [attr addAttribute:NSFontAttributeName value:font range:attr.range];
+    
+    _header = attr;
+    
+}
+
+-(BOOL)updateItemHeightWithWidth:(int)width {
+    
+    if(_autoHeight) {
+        self.height = [_header sizeForTextFieldForWidth:width - (self.xOffset * 2)].height;
+        
+        return YES;
+    }
+    
+    return NO;
+}
+
+-(Class)viewClass {
+    return [GeneralSettingsBlockHeaderView class];
+}
+
 
 @end
 
 
 @interface  GeneralSettingsBlockHeaderView()
-@property (nonatomic,strong) TMTextField *textField;
+@property (nonatomic,strong) TMHyperlinkTextField *textField;
 
 @end
 
@@ -48,7 +111,7 @@
 
 -(id)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
-        self.textField = [TMTextField defaultTextField];
+        self.textField = [TMHyperlinkTextField defaultTextField];
 
         [[self.textField cell] setLineBreakMode:NSLineBreakByWordWrapping];
         [self.textField setFrameOrigin:NSMakePoint(100, 0)];
@@ -61,12 +124,23 @@
     return self;
 }
 
+-(void)mouseDown:(NSEvent *)theEvent {
+    TGGeneralRowItem *item = (TGGeneralRowItem *) [self rowItem];
+    
+    if(item.callback != nil) {
+        item.callback(item);
+    }
+    
+}
+
+
 
 -(void)redrawRow {
     
     GeneralSettingsBlockHeaderItem *item = (GeneralSettingsBlockHeaderItem *)[self rowItem];
     
     [self.textField setAttributedStringValue:item.header];
+    
 }
 
 -(void)setFrameSize:(NSSize)newSize {
@@ -74,14 +148,21 @@
     
     GeneralSettingsBlockHeaderItem *item = (GeneralSettingsBlockHeaderItem *)[self rowItem];
     
-    NSSize s = [item.header sizeForTextFieldForWidth:NSWidth(self.frame) - 200];
+    NSSize s = [item.header sizeForTextFieldForWidth:NSWidth(self.frame) - item.xOffset*2];
     
-    [self.textField setFrameSize:NSMakeSize(NSWidth(self.frame) - 200, s.height )];
-    [self.textField setFrameOrigin:NSMakePoint(100, item.isFlipped ? NSHeight(self.frame) - s.height : 0 )];
+    [self.textField setFrameSize:NSMakeSize(NSWidth(self.frame) - item.xOffset*2, s.height )];
+    [self.textField setFrameOrigin:NSMakePoint(item.xOffset - 2, item.isFlipped ? NSHeight(self.frame) - s.height : 2 )];
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
     [super drawRect:dirtyRect];
+    
+    GeneralSettingsBlockHeaderItem *item = (GeneralSettingsBlockHeaderItem *)[self rowItem];
+    
+    if(item.drawsSeparator) {
+        [DIALOG_BORDER_COLOR set];
+        NSRectFill(NSMakeRect(item.xOffset, 0, NSWidth(dirtyRect) - item.xOffset*2, DIALOG_BORDER_WIDTH));
+    }
     
     // Drawing code here.
 }

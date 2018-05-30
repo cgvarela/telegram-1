@@ -14,6 +14,7 @@
 @property (nonatomic,strong) NSTextField *nameField;
 @property (nonatomic,strong) TGImageView *imageView;
 @property (nonatomic,strong) BTRButton *selectButton;
+@property (nonatomic,strong) TMView *animatedBackground;
 @end
 
 
@@ -25,13 +26,23 @@
     
     [DIALOG_BORDER_COLOR set];
     
-    NSRectFill(NSMakeRect(60, 0, NSWidth(dirtyRect) - 60, DIALOG_BORDER_WIDTH));
+    NSRectFill(NSMakeRect(60, 0, NSWidth(dirtyRect) - 70, DIALOG_BORDER_WIDTH));
     
 }
 
 
 -(instancetype)initWithFrame:(NSRect)frameRect {
     if(self = [super initWithFrame:frameRect]) {
+        
+        
+        _animatedBackground = [[TMView alloc] initWithFrame:self.bounds];
+        [_animatedBackground setAlphaValue:0.0];
+        _animatedBackground.backgroundColor = GRAY_BORDER_COLOR;
+        [self addSubview:_animatedBackground];
+        
+        
+        
+        
         _nameField = [[NSTextField alloc] init];
         
         [_nameField setBordered:NO];
@@ -39,9 +50,9 @@
         [_nameField setSelectable:NO];
         [_nameField setEditable:NO];
         [[_nameField cell] setLineBreakMode:NSLineBreakByTruncatingTail];
-        
+        [[_nameField cell] setTruncatesLastVisibleLine:YES];
         [_nameField setFrameOrigin:NSMakePoint(60, 17)];
-        [_nameField setFrameSize:NSMakeSize(NSWidth(frameRect) - 85, 40)];
+        [_nameField setFrameSize:NSMakeSize(NSWidth(frameRect) - 100, 40)];
         
         [self addSubview:_nameField];
         
@@ -78,6 +89,12 @@
     return self;
 }
 
+-(void)setFrameSize:(NSSize)newSize {
+    [super setFrameSize:newSize];
+    
+    [_animatedBackground setFrameSize:newSize];
+}
+
 -(void)mouseDown:(NSEvent *)theEvent {
     
     TGS_ConversationRowItem *item = (TGS_ConversationRowItem *) [self rowItem];
@@ -85,6 +102,20 @@
     item.isSelected = !item.isSelected;
     
     [self setSelected:item.isSelected animation:YES];
+    
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+        [context setDuration:0.1];
+        [[_animatedBackground animator] setAlphaValue:1.0];
+        
+    } completionHandler:^{
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+            [context setDuration:0.1];
+            [[_animatedBackground animator] setAlphaValue:0.0];
+            
+        } completionHandler:^{
+            
+        }];
+    }];
     
 }
 

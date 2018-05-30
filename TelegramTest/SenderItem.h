@@ -39,16 +39,13 @@ typedef enum {
 
 
 @property (nonatomic,strong) TL_conversation *conversation;
-@property (nonatomic,strong) MessageTableItem *tableItem;
 
 @property (nonatomic, strong) NSString *filePath;
 
-- (id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation;
+- (id)initWithMessage:(NSString *)message forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags;
 
 
-- (id)initWithPath:(NSString *)filePath forConversation:(TL_conversation *)conversation;
-
-- (id)initWithPath:(NSString *)filePath forConversation:(TL_conversation *)conversation;
+- (id)initWithPath:(NSString *)filePath forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags;
 
 -(id)initWithConversation:(TL_conversation *)conversation;
 
@@ -60,6 +57,8 @@ typedef enum {
 -(void)enumerateEventListeners:(void (^)(id<SenderListener> listener, NSUInteger idx, BOOL *stop))enumerator;
 -(void)addEventListener:(id<SenderListener>)listener;
 -(void)removeEventListener:(id<SenderListener>)listener;
+-(void)removeAllListeners;
+
 
 +(void)appTerminatedNeedSaveSenders;
 
@@ -70,5 +69,12 @@ typedef enum {
 -(void)cancel;
 -(void)resend;
 
+
+-(BOOL)canRelease;
+
+-(int)senderFlags;
+
+-(void)updateMessageId:(TLUpdates *)updates;
+-(TL_updateNewMessage *)updateNewMessageWithUpdates:(TLUpdates *)updates;
 
 @end

@@ -123,12 +123,9 @@ DYNAMIC_PROPERTY(DIALOGTITLE);
     
     NSMutableAttributedString *dialogTitleAttributedString = [[NSMutableAttributedString alloc] init];
     
-    [dialogTitleAttributedString appendAttributedString:[NSAttributedString attributedStringWithAttachment:chatIconAttachment()]];
-    [dialogTitleAttributedString setSelectionAttachment:chatIconSelectedAttachment() forAttachment:chatIconAttachment()];
-    
     [dialogTitleAttributedString appendString:title withColor:NSColorFromRGB(0x333333)];
     [dialogTitleAttributedString setSelectionColor:NSColorFromRGB(0xffffff) forColor:NSColorFromRGB(0x333333)];
-    [dialogTitleAttributedString setFont:[NSFont fontWithName:@"HelveticaNeue" size:14] forRange:dialogTitleAttributedString.range];
+    [dialogTitleAttributedString setFont:TGSystemFont(14) forRange:dialogTitleAttributedString.range];
     
     [self setDIALOGTITLE:dialogTitleAttributedString];
     
@@ -149,7 +146,7 @@ DYNAMIC_PROPERTY(TITLEFORMESSAGE);
     NSMutableAttributedString *dialogTitleAttributedString = [[NSMutableAttributedString alloc] init];
     
     [dialogTitleAttributedString appendString:title withColor:NSColorFromRGB(0x222222)];
-    [dialogTitleAttributedString setFont:[NSFont fontWithName:@"HelveticaNeue" size:14] forRange:dialogTitleAttributedString.range];
+    [dialogTitleAttributedString setFont:TGSystemFont(14) forRange:dialogTitleAttributedString.range];
     
     NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
     [style setAlignment:NSCenterTextAlignment];
@@ -174,25 +171,6 @@ DYNAMIC_PROPERTY(TITLEFORMESSAGE);
 
 - (NSAttributedString *)statusAttributedString {
     return [[NSMutableAttributedString alloc] initWithString:@"string"];
-}
-
-
-static NSTextAttachment *chatIconAttachment() {
-    static NSTextAttachment *instance;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [NSMutableAttributedString textAttachmentByImage:[image_chat() imageWithInsets:NSEdgeInsetsMake(0, 1, 0, 4)]];
-    });
-    return instance;
-}
-
-static NSTextAttachment *chatIconSelectedAttachment() {
-    static NSTextAttachment *instance;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [NSMutableAttributedString textAttachmentByImage:[image_chatHighlighted() imageWithInsets:NSEdgeInsetsMake(0, 1, 0, 4)]];
-    });
-    return instance;
 }
 
 -(void)setTitle:(NSString *)title {
@@ -235,10 +213,10 @@ static NSTextAttachment *chatIconSelectedAttachment() {
     
 
     
-    [attributedString setFont:[NSFont fontWithName:@"HelveticaNeue" size:12] forRange:attributedString.range];
+    [attributedString setFont:TGSystemFont(12) forRange:attributedString.range];
     
     NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-    [paragraphStyle setAlignment:2];
+    [paragraphStyle setAlignment:NSCenterTextAlignment];
     [attributedString addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:NSMakeRange(0, attributedString.length)];
     
     

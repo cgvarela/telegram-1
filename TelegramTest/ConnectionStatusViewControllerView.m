@@ -45,7 +45,7 @@
         
         self.progress.autoresizingMask = self.field.autoresizingMask = NSViewMinXMargin | NSViewMaxXMargin;
         
-        [self.field setFont:[NSFont fontWithName:@"HelveticaNeue" size:15]];
+        [self.field setFont:TGSystemFont(15)];
         
         [self addSubview:self.field];
         
@@ -85,7 +85,7 @@ static NSColor *stateColor[5];
     
 
     
-    [LoopingUtils runOnMainQueueAsync:^{
+    [ASQueue dispatchOnMainQueue:^{
         
         ConnectingStatusType oldState = _state;
         if(state == _state)
@@ -203,6 +203,11 @@ static NSColor *stateColor[5];
             [string appendString:@"."];
             
             [self setString:string update:NO];
+            
+            if(_state == ConnectingStatusTypeNormal) {
+                [self.animationTimer invalidate];
+                self.animationTimer = nil;
+            }
             
             
         } queue:dispatch_get_main_queue()];

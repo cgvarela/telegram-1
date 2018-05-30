@@ -14,6 +14,7 @@
 #import "TGPasslock.h"
 #import "TGModalSetCaptionView.h"
 #import "TGModalView.h"
+#import "TGHeadChatPanel.h"
 @interface TMViewController ()
 @property (nonatomic,strong) TMProgressModalView *progressView;
 @property (nonatomic,strong) TMBackButton *backButton;
@@ -26,7 +27,17 @@
     self = [super init];
     if(self) {
         self.frameInit = frame;
+        _navigationBarView = [[TMNavigationBar alloc] initWithFrame:NSZeroRect];
     }
+    return self;
+}
+
+-(instancetype)init {
+    if(self = [super init]) {
+        self.frameInit = NSZeroRect;
+        _navigationBarView = [[TMNavigationBar alloc] initWithFrame:NSZeroRect];
+    }
+    
     return self;
 }
 
@@ -41,8 +52,10 @@
 - (void)setCenterNavigationBarView:(TMView *)centerNavigationBarView animated:(BOOL)animation {
     self->_centerNavigationBarView = centerNavigationBarView;
     
-    if(self.navigationViewController && self.navigationViewController.currentController == self)
-        [self.navigationViewController.nagivationBarView setCenterView:centerNavigationBarView animated:animation];
+    [self.navigationBarView setCenterView:centerNavigationBarView animated:animation];
+    
+//    if(self.navigationViewController && self.navigationViewController.currentController == self)
+//        [self.navigationViewController.nagivationBarView setCenterView:centerNavigationBarView animated:animation];
 }
 
 - (void)setLeftNavigationBarView:(TMView *)leftNavigationBarView {
@@ -52,7 +65,9 @@
 - (void)setLeftNavigationBarView:(TMView *)leftNavigationBarView animated:(BOOL)animation {
     self->_leftNavigationBarView = leftNavigationBarView;
     
-    [self.navigationViewController.nagivationBarView setLeftView:leftNavigationBarView animated:animation];
+     [self.navigationBarView setLeftView:leftNavigationBarView animated:animation];
+    
+   // [self.navigationViewController.nagivationBarView setLeftView:leftNavigationBarView animated:animation];
 }
 
 - (void)setRightNavigationBarView:(TMView *)rightNavigationBarView {
@@ -62,8 +77,10 @@
 - (void)setRightNavigationBarView:(TMView *)rightNavigationBarView animated:(BOOL)animation {
     self->_rightNavigationBarView = rightNavigationBarView;
     
-    if(self.navigationViewController && self.navigationViewController.currentController == self)
-        [self.navigationViewController.nagivationBarView setRightView:rightNavigationBarView animated:animation];
+    [self.navigationBarView setRightView:rightNavigationBarView animated:animation];
+    
+ //   if(self.navigationViewController && self.navigationViewController.currentController == self)
+   //     [self.navigationViewController.nagivationBarView setRightView:rightNavigationBarView animated:animation];
 }
 
 -(TMView *)standartLeftBarView {
@@ -72,6 +89,8 @@
 //    {
 //        return nil;
 //    }
+    
+    
     
     if(self.backButton)
     {
@@ -89,6 +108,10 @@
     return (TMView *) self.backButton;
 }
 
+-(TMView *)standartRightBarView {
+    return nil;
+}
+
 
 -(void)setCenterBarViewText:(NSString *)text {
     
@@ -97,7 +120,7 @@
         _centerTextField = [TMTextField defaultTextField];
         [_centerTextField setAlignment:NSCenterTextAlignment];
         [_centerTextField setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin];
-        [_centerTextField setFont:[NSFont fontWithName:@"HelveticaNeue" size:15]];
+        [_centerTextField setFont:TGSystemFont(15)];
         [_centerTextField setTextColor:NSColorFromRGB(0x222222)];
         [[_centerTextField cell] setTruncatesLastVisibleLine:YES];
         [[_centerTextField cell] setLineBreakMode:NSLineBreakByTruncatingTail];
@@ -135,16 +158,36 @@
     [_centerTextField setFrameOrigin:NSMakePoint(_centerTextField.frame.origin.x, 13)];
 }
 
+-(BOOL)proccessEnterAction {
+    return NO;
+}
+-(BOOL)proccessEscAction {
+    return NO;
+}
+
+-(void)becomeFirstResponder:(BOOL)force {
+    [self becomeFirstResponder];
+}
+
+-(void)addSubview:(NSView *)subview {
+    [self.view addSubview:subview];
+}
+
 
 - (void)viewWillAppear:(BOOL)animated {
     
+    [self becomeFirstResponder];
+    
     self.leftNavigationBarView = [self standartLeftBarView];
     
-    
-    if([Telegram isSingleLayout] && [Telegram rightViewController].currentEmptyController == [Telegram rightViewController].navigationViewController.currentController && ![[Telegram rightViewController] isModalViewActive])
+    if(self.navigationViewController == [Telegram rightViewController].navigationViewController)
     {
-        self.leftNavigationBarView = nil;
+        if([Telegram isSingleLayout] && [Telegram rightViewController].currentEmptyController == [Telegram rightViewController].navigationViewController.currentController && ![[Telegram rightViewController] isModalViewActive])
+        {
+            self.leftNavigationBarView = nil;
+        }
     }
+    
 }
 
 
@@ -185,13 +228,13 @@ static TGModalSetCaptionView *setCaptionView;
 +(void)showModalProgress {
     
     if(!progressView) {
-        progressView = [[TMProgressModalView alloc] initWithFrame:[[[Telegram delegate] window].contentView bounds]];
+        progressView = [[TMProgressModalView alloc] initWithFrame:[appWindow().contentView.subviews[0] bounds]];
         
         progressView.layer.opacity = 0;
         
-        [progressView setCenterByView:[[Telegram delegate] window].contentView];
+        [progressView setCenterByView:appWindow().contentView.subviews[0]];
         
-         [[[Telegram delegate] window].contentView addSubview:progressView];
+         [appWindow().contentView.subviews[0] addSubview:progressView];
     }
     
    
@@ -202,6 +245,12 @@ static TGModalSetCaptionView *setCaptionView;
     
     [progressView.layer pop_addAnimation:anim forKey:@"fade"];
     
+}
+
++(void)showModalProgressWithDescription:(NSString *)description {
+    [self showModalProgress];
+    
+    [progressView setDescription:description];
 }
 
 +(void)hideModalProgress {
@@ -223,7 +272,7 @@ static TGModalSetCaptionView *setCaptionView;
 
 +(POPBasicAnimation *)popAnimationForProgress:(float)from to:(float)to {
     POPBasicAnimation *anim = [POPBasicAnimation animationWithPropertyNamed:kPOPLayerOpacity];
-    anim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    anim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn];
     anim.fromValue = @(from);
     anim.toValue = @(to);
     anim.duration = 0.2;
@@ -232,20 +281,22 @@ static TGModalSetCaptionView *setCaptionView;
     return anim;
 }
 
+-(TMNavigationController *)rightNavigationController {
+    return [Telegram rightViewController].navigationViewController;
+}
+
 
 +(void)showAttachmentCaption:(NSArray *)attachments onClose:(dispatch_block_t)onClose {
     
     if(!setCaptionView) {
         
-        setCaptionView = [[TGModalSetCaptionView alloc] initWithFrame:[[[Telegram delegate] window].contentView bounds]];
+        setCaptionView = [[TGModalSetCaptionView alloc] initWithFrame:[appWindow().contentView.subviews[0] bounds]];
         
         setCaptionView.layer.opacity = 0;
         
+         [setCaptionView setCenterByView:appWindow().contentView.subviews[0] ];
         
-        
-        [setCaptionView setCenterByView:[[Telegram delegate] window].contentView];
-        
-        [[[Telegram delegate] window].contentView addSubview:setCaptionView];
+        [appWindow().contentView.subviews[0] addSubview:setCaptionView];
     } else {
         return;
     }
@@ -282,7 +333,7 @@ static TGModalSetCaptionView *setCaptionView;
 +(BOOL)isModalActive {
     __block BOOL res = NO;
     
-    NSView *view = [[Telegram delegate] window].contentView;
+    NSView *view = appWindow().contentView.subviews[0];
     
     [view.subviews enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
         
@@ -296,10 +347,20 @@ static TGModalSetCaptionView *setCaptionView;
     return res;
 }
 
++(void)closeAllModals {
+    NSArray *modals = [TMViewController modalsView];
+    
+    if(modals.count > 0) {
+        [modals enumerateObjectsUsingBlock:^(TGModalView *obj, NSUInteger idx, BOOL *stop) {
+            [obj close:modals.count == 1];
+        }];
+    }
+}
+
 
 +(NSArray *)modalsView {
     
-    NSView *view = [[Telegram delegate] window].contentView;
+    NSView *view = appWindow().contentView.subviews[0];
     
     NSMutableArray *modals = [[NSMutableArray alloc] init];
     
@@ -315,10 +376,43 @@ static TGModalSetCaptionView *setCaptionView;
     return modals;
 }
 
++(void)becomeFirstResponderToModalView {
+    
+    
+    
+    NSArray *modals = [self modalsView];
+    
+    if(modals.count > 0) {
+        __block TGModalView *modalView = [modals lastObject];
+        
+        [modals enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(TGModalView *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            
+            NSUInteger idx1 = [modalView.superview.subviews indexOfObject:modalView];
+            NSUInteger idx2 = [modalView.superview.subviews indexOfObject:obj];
+            
+            if(idx2 > idx1) {
+                modalView = obj;
+            }
+            
+        }];
+        
+        [modalView becomeFirstResponder];
+    }
+    
+}
+
++(void)hideAllModals {
+    NSArray *modals = [self modalsView];
+    
+    [modals enumerateObjectsUsingBlock:^(TGModalView *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        [obj close:NO];
+    }];
+}
+
 +(TMView *)modalView {
     __block TMView *res;
     
-    NSView *view = [[Telegram delegate] window].contentView;
+    NSView *view = appWindow().contentView.subviews[0];
     
     [view.subviews enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
         
@@ -349,7 +443,23 @@ static TGModalSetCaptionView *setCaptionView;
 }
 
 -(void)showModalProgress {
-    [TMViewController showModalProgress];
+    if(!progressView) {
+        progressView = [[TMProgressModalView alloc] initWithFrame:[self.view.window.contentView.subviews[0] bounds]];
+        
+        progressView.layer.opacity = 0;
+        
+        [progressView setCenterByView:self.view.window.contentView.subviews[0]];
+        
+        [self.view.window.contentView.subviews[0] addSubview:progressView];
+    }
+    
+    
+    
+    [(TelegramWindow *)self.view.window setAcceptEvents:NO];
+    
+    POPBasicAnimation *anim = [TMViewController popAnimationForProgress:progressView.layer.opacity to:0.8];
+    
+    [progressView.layer pop_addAnimation:anim forKey:@"fade"];
 }
 -(void)hideModalProgress {
     [TMViewController hideModalProgress];
@@ -357,21 +467,21 @@ static TGModalSetCaptionView *setCaptionView;
 
 +(void)showPasslock:(passlockCallback)callback animated:(BOOL)animated {
     
-    
+    [TGHeadChatPanel lockAllControllers];
     assert([NSThread isMainThread]);
     
     if(passlockView.window)
         return;
     
     if(!passlockView) {
-        passlockView = [[TGPasslockModalView alloc] initWithFrame:[[[Telegram delegate] mainWindow].contentView bounds]];
+        passlockView = [[TGPasslockModalView alloc] initWithFrame:[appWindow().contentView.subviews[0] bounds]];
         
         if(animated)
             passlockView.layer.opacity = 0;
         
-        [passlockView setCenterByView:[[Telegram delegate] mainWindow].contentView];
+        [passlockView setCenterByView:appWindow().contentView.subviews[0]];
         
-        [[[Telegram delegate] mainWindow].contentView addSubview:passlockView];
+        [appWindow().contentView.subviews[0] addSubview:passlockView];
     }
     
     passlockView.passlockResult = callback;
@@ -424,7 +534,7 @@ static TGModalSetCaptionView *setCaptionView;
 
 +(void)hidePasslock {
     
-    
+    [TGHeadChatPanel unlockAllControllers];
     
     assert([NSThread isMainThread]);
     
@@ -441,6 +551,8 @@ static TGModalSetCaptionView *setCaptionView;
     [passlockView.layer pop_addAnimation:anim forKey:@"fade"];
     
     [TGPasslock setVisibility:NO];
+    
+    [[Telegram rightViewController].navigationViewController.currentController viewWillAppear:NO];
 }
 
 -(void)showPasslock:(passlockCallback)callback {
@@ -457,13 +569,21 @@ static TGModalSetCaptionView *setCaptionView;
 }
 
 -(BOOL)becomeFirstResponder {
+    
     return [TGPasslock isVisibility] ? [passlockView becomeFirstResponder] : [self.view becomeFirstResponder];
 }
 
+-(BOOL)resignFirstResponder {
+    return [self.view resignFirstResponder];
+}
+
 - (void)loadView {
-    self.view = [[TMView alloc] initWithFrame: self.frameInit];
+    if(!_view)
+        self.view = [[TMView alloc] initWithFrame: self.frameInit];
 
 }
+
+
 
 - (void)loadViewIfNeeded {
     [self view];
@@ -472,9 +592,12 @@ static TGModalSetCaptionView *setCaptionView;
 - (TMView *)view {
     if(!_view)
         [self loadView];
+    _view.viewController = self;
     return _view;
 }
 
-
+-(MessagesViewController *)messagesViewController {
+    return self.navigationViewController.messagesViewController;
+}
 
 @end

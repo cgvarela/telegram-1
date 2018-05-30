@@ -7,10 +7,10 @@
 //
 
 #import "NotSelectedDialogsViewController.h"
-#import "TMGifImageView.h"
 #import <AVFoundation/AVFoundation.h>
 #import "TGCTextView.h"
 @interface NotSelectedDialogsViewController()
+@property (nonatomic,strong) NSTextView *hiddenView;
 @end
 
 @implementation NotSelectedDialogsViewController
@@ -19,6 +19,8 @@
     self = [super initWithFrame:frame];
     if(self) {
         self.isNavigationBarHidden = YES;
+        
+        
     }
     return self;
 }
@@ -28,14 +30,22 @@
     
     [self.view setWantsLayer:YES];
     
+    self.view.layer.backgroundColor = [NSColor whiteColor].CGColor;
+    
     NSView *containerView = [[NSView alloc] init];
     [self.view addSubview:containerView];
 
     
-    weakify();
+    _hiddenView = [[NSTextView alloc] init];
+
+    [self.view addSubview:_hiddenView];
+    
+    
+    
+    weak();
     
     [self.view setDrawBlock:^{
-       [containerView setCenterByView:strongSelf.view];
+       [containerView setCenterByView:weakSelf.view];
     }];
     
     TMTextField *textField = [TMTextField defaultTextField];
@@ -44,7 +54,7 @@
     NSMutableParagraphStyle *mutParaStyle=[[NSMutableParagraphStyle alloc] init];
     [mutParaStyle setAlignment:NSCenterTextAlignment];
     [mutParaStyle setLineSpacing:3];
-    [textField setAttributedStringValue:[[NSAttributedString alloc] initWithString:NSLocalizedString(@"Conversation.SelectConversation", nil) attributes:@{NSForegroundColorAttributeName: DARK_GRAY, NSFontAttributeName: [NSFont fontWithName:@"HelveticaNeue" size:14]}]];
+    [textField setAttributedStringValue:[[NSAttributedString alloc] initWithString:self.customTextCap.length > 0 ? self.customTextCap : NSLocalizedString(@"Conversation.SelectConversation", nil) attributes:@{NSForegroundColorAttributeName: DARK_GRAY, NSFontAttributeName: TGSystemFont(14)}]];
     [textField sizeToFit];
     
     [textField setDrawsBackground:NO];
@@ -71,17 +81,40 @@
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
-    [self.view.window makeFirstResponder:nil];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.view.window makeFirstResponder:nil];
-    });
+  //  [self.view.window makeFirstResponder:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(windowBecomeNotification:) name:NSWindowDidBecomeKeyNotification object:self.view.window];
+    
+   // [[Telegram leftViewController] becomeFirstResponder];
+    
+//    dispatch_async(dispatch_get_main_queue(), ^{
+//        [self.view.window makeFirstResponder:nil];
+//    });
+}
+
+-(void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+-(void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+-(void)windowBecomeNotification:(NSNotification *)notification {
+  //  [self.view.window makeFirstResponder:self.view];
+//    dispatch_async(dispatch_get_main_queue(), ^{
+//        [[Telegram leftViewController].conversationsViewController resignFirstResponder];
+//
+//    });
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.view.window makeFirstResponder:nil];
     
-    [Notification perform:@"ChangeDialogSelection" data:@{KEY_DIALOG:[NSNull null], @"sender":self}];
+
 }
 
 

@@ -13,9 +13,9 @@
 #import "TGSendTypingManager.h"
 #import "webp/decode.h"
 #import "FileUtils.h"
-#import "EmojiViewController.h"
 #import "StickersPanelView.h"
 #import <AVFoundation/AVFoundation.h>
+#import "MessageTableItem.h"
 @interface DocumentSenderItem ()
 
 @property (nonatomic, strong) NSString *mimeType;
@@ -35,14 +35,11 @@
     [super setState:state];
 }
 
-- (id)initWithPath:(NSString *)path forConversation:(TL_conversation *)conversation {
-    
+- (id)initWithPath:(NSString *)path forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags caption:(NSString *)caption {
     if(self = [super init]) {
         self.mimeType = mimetypefromExtension([path pathExtension]);
         self.filePath = path;
         self.conversation = conversation;
-        
-        self.mimeType = mimetypefromExtension([path pathExtension]);
         
         long randomId = rand_long();
         
@@ -50,12 +47,10 @@
         NSMutableArray *attrs = [[NSMutableArray alloc] init];
         
         
+        
         TL_documentAttributeFilename *filenameAttr = [TL_documentAttributeFilename createWithFile_name:[self.filePath lastPathComponent]];
         
         [attrs addObject:filenameAttr];
-        
-        
-        
         
         __block NSData *thumbData;
         __block NSImage *thumbImage;
@@ -128,9 +123,10 @@
             
             NSString *songName = tags[@"songName"];
             NSString *artistName = tags[@"artist"];
-
             
-            [attrs addObject:[TL_documentAttributeAudio createWithDuration:CMTimeGetSeconds(asset.duration) title:songName performer:artistName]];
+            //[TL_documentAttributeAudio createWithDuration:CMTimeGetSeconds(asset.duration) title:songName performer:artistName]
+            
+            [attrs addObject:[TL_documentAttributeAudio createWithFlags:0 duration:CMTimeGetSeconds(asset.duration) title:songName performer:artistName waveform:nil]];
             
         }
         
@@ -150,7 +146,7 @@
             int heigth = 0;
             if (WebPGetInfo(data.bytes, data.length, &width, &heigth) && width > 100 & heigth > 100)
             {
-                [attrs addObject:[TL_documentAttributeSticker createWithAlt:@"" stickerset:[TL_inputStickerSetEmpty create]]];
+                [attrs addObject:[TL_documentAttributeSticker createWithFlags:0 alt:@"" stickerset:[TL_inputStickerSetEmpty create] mask_coords:nil]];
                 [attrs addObject:[TL_documentAttributeImageSize createWithW:width h:heigth]];
                 
                 NSString *sp = [NSString stringWithFormat:@"%@/%ld.webp",[FileUtils path],randomId];
@@ -175,9 +171,9 @@
             thumbBlock();
         
         
-       TLPhotoSize *size;
+        TLPhotoSize *size;
         if(thumbImage) {
-           
+            
             size = [TL_photoCachedSize createWithType:thumbName location:[TL_fileLocation createWithDc_id:0 volume_id:randomId local_id:0 secret:0] w:thumbImage.size.width h:thumbImage.size.height bytes:thumbData];
             
             [TGCache cacheImage:thumbImage forKey:size.location.cacheKey groups:@[IMGCACHE]];
@@ -186,22 +182,31 @@
             size = [TL_photoSizeEmpty createWithType:thumbName];
         }
         
+        TL_documentAttributeLocalFile *fileAttr = [TL_documentAttributeLocalFile createWithFile_path:path];
         
+        [attrs addObject:fileAttr];
         
-        TL_messageMediaDocument *document = [TL_messageMediaDocument createWithDocument:[TL_outDocument createWithN_id:randomId access_hash:0 date:[[MTNetwork instance] getTime] mime_type:self.mimeType size:(int)fileSize(self.filePath) thumb:size dc_id:0 file_path:self.filePath attributes:attrs]];
+        TL_messageMediaDocument *document = [TL_messageMediaDocument createWithDocument:[TL_document createWithN_id:randomId access_hash:0 date:[[MTNetwork instance] getTime] mime_type:self.mimeType size:(int)fileSize(self.filePath) thumb:size dc_id:0 version:0 attributes:attrs] caption:caption];
         
-        self.message = [MessageSender createOutMessage:@"" media:document conversation:conversation];
+        self.message = [MessageSender createOutMessage:@"" media:document conversation:conversation additionFlags:additionFlags];
         
     }
     
     return self;
 }
 
+- (id)initWithPath:(NSString *)path forConversation:(TL_conversation *)conversation additionFlags:(int)additionFlags {
+    return [self initWithPath:path forConversation:conversation additionFlags:additionFlags caption:nil];
+   
+}
+
 
 
 - (void)performRequest {
     
-    NSString *export = exportPath(self.message.randomId,[self.message.media.document.file_name pathExtension]);
+    TL_documentAttributeFilename *fileName = (TL_documentAttributeFilename *) [self.message.media.document attributeWithClass:[TL_documentAttributeFilename class]];
+    
+    NSString *export = exportPath(self.message.randomId,extensionForMimetype(self.message.media.document.mime_type));
     
     if(!self.filePath)
         self.filePath = export;
@@ -214,28 +219,28 @@
     
     
     
-    weakify();
+    weak();
     self.uploader = [[UploadOperation alloc] init];
     [self.uploader setUploadComplete:^(UploadOperation *uploader, id input) {
-        strongSelf.inputFile = input;
-        strongSelf.isFileUploaded = YES;
-        [strongSelf sendMessage];
+        weakSelf.inputFile = input;
+        weakSelf.isFileUploaded = YES;
+        [weakSelf sendMessage];
     }];
     [self.uploader setUploadProgress:^(UploadOperation *operation, NSUInteger current, NSUInteger total) {
-        strongSelf.progress = (float)current/ (float)total * 100.0f;
+        weakSelf.progress = (float)current/ (float)total * 100.0f;
     }];
     
     [self.uploader setUploadTypingNeed:^(UploadOperation *operation) {
-        [TGSendTypingManager addAction:[TL_sendMessageUploadDocumentAction createWithProgress:strongSelf.progress] forConversation:strongSelf.conversation];
+        [TGSendTypingManager addAction:[TL_sendMessageUploadDocumentAction createWithProgress:weakSelf.progress] forConversation:weakSelf.conversation];
     }];
     
     [self.uploader setUploadStarted:^(UploadOperation *operation, NSData *data) {
-        [TGSendTypingManager addAction:[TL_sendMessageUploadDocumentAction createWithProgress:strongSelf.progress] forConversation:strongSelf.conversation];
+        [TGSendTypingManager addAction:[TL_sendMessageUploadDocumentAction createWithProgress:weakSelf.progress] forConversation:weakSelf.conversation];
     }];
     
     
     [self.uploader setFilePath:self.filePath];
-    [self.uploader setFileName:self.message.media.document.file_name];
+    [self.uploader setFileName:fileName.file_name];
     [self.uploader ready:UploadDocumentType];
     
     TLPhotoSize *size = [self.message.media.document thumb];
@@ -244,11 +249,10 @@
         self.uploaderThumb = [[UploadOperation alloc] init];
         
         [self.uploaderThumb setFileData:size.bytes];
-        [self.uploaderThumb setFileName:size.type];
         [self.uploaderThumb setUploadComplete:^(UploadOperation *tu, id inputThumb) {
-            strongSelf.thumbFile = inputThumb;
-            strongSelf.isThumbUploaded = YES;
-            [strongSelf sendMessage];
+            weakSelf.thumbFile = inputThumb;
+            weakSelf.isThumbUploaded = YES;
+            [weakSelf sendMessage];
         }];
         [self.uploaderThumb ready:UploadImageType];
         
@@ -270,114 +274,122 @@
    
     if(isNewDocument) {
         if([self.thumbFile isKindOfClass:[TLInputFile class]]) {
-            media = [TL_inputMediaUploadedThumbDocument createWithFile:self.inputFile thumb:self.thumbFile mime_type:self.mimeType attributes:self.message.media.document.attributes];
+            media = [TL_inputMediaUploadedThumbDocument createWithFlags:0 file:self.inputFile thumb:self.thumbFile mime_type:self.message.media.document.mime_type attributes:[self.message.media.document.serverAttributes mutableCopy] caption:self.message.media.caption stickers:nil];
         } else {
-            media = [TL_inputMediaUploadedDocument createWithFile:self.inputFile mime_type:self.mimeType attributes:self.message.media.document.attributes];
+            media = [TL_inputMediaUploadedDocument createWithFlags:0 file:self.inputFile mime_type:self.message.media.document.mime_type attributes:[self.message.media.document.serverAttributes mutableCopy] caption:self.message.media.caption stickers:nil];
         }
     } else {
         TLDocument *document = (TLDocument *)self.inputFile;
-        media = [TL_inputMediaDocument createWithN_id:[TL_inputDocument createWithN_id:document.n_id access_hash:document.access_hash]];
+        media = [TL_inputMediaDocument createWithN_id:[TL_inputDocument createWithN_id:document.n_id access_hash:document.access_hash] caption:self.message.media.caption];
     }
     
     
     id request = nil;
     
-    if(self.conversation.type == DialogTypeBroadcast) {
-        request = [TLAPI_messages_sendBroadcast createWithContacts:[self.conversation.broadcast inputContacts] random_id:[self.conversation.broadcast generateRandomIds] message:@"" media:media];
-    } else {
-        request = [TLAPI_messages_sendMedia createWithFlags:self.message.reply_to_msg_id != 0 ? 1 : 0 peer:self.conversation.inputPeer reply_to_msg_id:self.message.reply_to_msg_id media:media random_id:self.message.randomId  reply_markup:[TL_replyKeyboardMarkup createWithFlags:0 rows:[@[]mutableCopy]]];
-    }
+    request = [TLAPI_messages_sendMedia createWithFlags:[self senderFlags] peer:self.conversation.inputPeer reply_to_msg_id:self.message.reply_to_msg_id media:media random_id:self.message.randomId  reply_markup:[TL_replyKeyboardMarkup createWithFlags:0 rows:[@[]mutableCopy]]];
     
     
-    weakify();
+    weak();
     self.rpc_request = [RPCRequest sendRequest:request successHandler:^(RPCRequest *request, TLUpdates *response) {
         
-        if(response.updates.count < 2)
-        {
-            [strongSelf cancel];
-            return;
-        }
+        strongWeak();
         
-        TLMessage *msg = [TL_localMessage convertReceivedMessage:(TLMessage *) ( [response.updates[1] message])];
-        
-        if(strongSelf.conversation.type != DialogTypeBroadcast)  {
+        if(strongSelf != nil) {
+            [strongSelf updateMessageId:response];
+            
+            TL_localMessage *msg = [TL_localMessage convertReceivedMessage:[[strongSelf updateNewMessageWithUpdates:response] message]];
+            
+            if(msg == nil)
+            {
+                [strongSelf cancel];
+                return;
+            }
             
             strongSelf.message.n_id = msg.n_id;
             strongSelf.message.date = msg.date;
             
-        }
-        
-        
-        TL_localMessage *message = strongSelf.message;
-        
-        if(isNewDocument) {
-            message.media.document.thumb = [msg media].document.thumb;
-            message.media.document.thumb.bytes = nil;
-        }
-
-        [[NSFileManager defaultManager] removeItemAtPath:exportPath(self.message.randomId,[self.message.media.document.file_name pathExtension]) error:nil];
-        
-        
-        NSString *sp = [NSString stringWithFormat:@"%@/%ld.webp",[FileUtils path],message.media.document.n_id];
-        
-        NSString *np = [NSString stringWithFormat:@"%@/%ld.webp",[FileUtils path],[msg media].document.n_id];
-        
-        [[NSFileManager defaultManager] moveItemAtPath:sp toPath:np error:nil];
-        
-        [TGCache changeKey:[NSString stringWithFormat:@"s:%ld",message.media.document.n_id] withKey:[NSString stringWithFormat:@"s:%ld",[msg media].document.n_id]];
-       
-        message.n_id = msg.n_id;
-        message.date = msg.date;
-        message.dstate = DeliveryStateNormal;
-        message.media.document.dc_id = [msg media].document.dc_id;
-        message.media.document.size = [msg media].document.size;
-        message.media.document.access_hash = [msg media].document.access_hash;
-        message.media.document.n_id = [msg media].document.n_id;
-    
-        
-      
-        
-        
-        
-        
-        if(![message.media.document.thumb isKindOfClass:[TL_photoSizeEmpty class]]) {
-           
-            [message.media.document.thumb.bytes writeToFile:locationFilePath(message.media.document.thumb.location, @"tiff") atomically:NO];
-        }
-        
-        
-        if(message.media.document.isSticker) {
             
-            [ASQueue dispatchOnMainQueue:^{
-                 [StickersPanelView addLocalSticker:message.media.document];
-            }];
+            TL_localMessage *message = strongSelf.message;
             
+            if(isNewDocument) {
+                message.media.document.thumb = [msg media].document.thumb;
+                message.media.document.thumb.bytes = nil;
+            }
+            
+            
+            
+            if([strongSelf.message.media.document.mime_type hasSuffix:@"webp"]) {
+                NSString *sp = [NSString stringWithFormat:@"%@/%ld.webp",[FileUtils path],message.media.document.n_id];
+                
+                NSString *np = [NSString stringWithFormat:@"%@/%ld.webp",[FileUtils path],[msg media].document.n_id];
+                
+                [[NSFileManager defaultManager] moveItemAtPath:sp toPath:np error:nil];
+                
+                [TGCache changeKey:[NSString stringWithFormat:@"s:%ld",message.media.document.n_id] withKey:[NSString stringWithFormat:@"s:%ld",[msg media].document.n_id]];
+            }
+            
+            
+            
+            message.n_id = msg.n_id;
+            message.date = msg.date;
+            
+            message.media.document.dc_id = [msg media].document.dc_id;
+            message.media.document.size = [msg media].document.size;
+            message.media.document.access_hash = [msg media].document.access_hash;
+            message.media.document.n_id = [msg media].document.n_id;
+            
+            if([message.media.document isKindOfClass:[TL_compressDocument class]]) {
+                message.media = [msg media];
+            }
+            
+            strongSelf.message.media = message.media;
+            
+            
+            NSString *ep = exportPath(strongSelf.message.randomId,extensionForMimetype(strongSelf.message.media.document.mime_type));
+            
+            if([[NSFileManager defaultManager] fileExistsAtPath:ep isDirectory:NULL]) {
+                [[NSFileManager defaultManager] moveItemAtPath:ep toPath:mediaFilePath(strongSelf.message) error:nil];
+            }
+            
+            
+            if(![message.media.document.thumb isKindOfClass:[TL_photoSizeEmpty class]]) {
+                
+                [message.media.document.thumb.bytes writeToFile:[message.media.document.thumb.location path] atomically:NO];
+            }
+            
+            
+            strongSelf.uploader = nil;
+            strongSelf.uploaderThumb = nil;
+            
+            message.dstate = DeliveryStateNormal;
+            
+            [strongSelf.message save:YES];
+            
+            strongSelf.state = MessageSendingStateSent;
+            
+            
+            strongSelf = nil;
         }
         
         
-        
-        
-        self.uploader = nil;
-        self.uploaderThumb = nil;
-        
-        self.message.dstate = DeliveryStateNormal;
-        
-        [self.message save:YES];
-            
-        strongSelf.state = MessageSendingStateSent;
-      
-       
         
     } errorHandler:^(RPCRequest *request, RpcError *error) {
         
+        strongWeak();
         
-        strongSelf.uploader = nil;
+        if(strongSelf != nil) {
+            strongSelf.uploader = nil;
+            
+            if([strongSelf checkErrorAndReUploadFile:error path:strongSelf.filePath])
+                return;
+            
+            strongSelf.state = MessageSendingStateError;
+            
+            strongSelf = nil;
+        }
         
-        if([strongSelf checkErrorAndReUploadFile:error path:strongSelf.filePath])
-            return;
         
-        strongSelf.state = MessageSendingStateError;
-    } timeout:0 queue:[ASQueue globalQueue].nativeQueue];
+    } timeout:0 queue:[ASQueue globalQueue]._dispatch_queue];
 }
 
 -(void)cancel {

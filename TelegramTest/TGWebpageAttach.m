@@ -7,7 +7,7 @@
 //
 
 #import "TGWebpageAttach.h"
-
+#import "TGTextLabel.h"
 @interface TGWebpageAttach ()
 @property (nonatomic,assign) int peer_id;
 
@@ -29,16 +29,17 @@
     NSRectFill(NSMakeRect(0, 0, 2, NSHeight(self.frame)));
 }
 
--(id)initWithFrame:(NSRect)frameRect webpage:(TLWebPage *)webpage link:(NSString *)link {
+-(id)initWithFrame:(NSRect)frameRect webpage:(TLWebPage *)webpage link:(NSString *)link inputTemplate:(TGInputMessageTemplate *)inputTemplate {
     if(self = [super initWithFrame:frameRect]) {
         _webpage = webpage;
         _link = link;
+        _inputTemplate = inputTemplate;
         
         _titleField = [TMTextField defaultTextField];
         _stateField = [TMTextField defaultTextField];
         
         
-        [_titleField setFont:[NSFont fontWithName:@"HelveticaNeue" size:13]];
+        [_titleField setFont:TGSystemFont(13)];
         
         [_titleField setTextColor:LINK_COLOR];
         
@@ -46,11 +47,11 @@
         [_titleField setFrameOrigin:NSMakePoint(5, NSHeight(frameRect) - 13)];
         
         
-        [_stateField setFont:[NSFont fontWithName:@"HelveticaNeue" size:13]];
+        [_stateField setFont:TGSystemFont(13)];
         
         
         
-        [_stateField setFrameOrigin:NSMakePoint(5, 0)];
+        [_stateField setFrameOrigin:NSMakePoint(5, -3)];
         
         [self addSubview:_titleField];
         [self addSubview:_stateField];
@@ -60,10 +61,13 @@
         
         _deleteImageView.image = image_CancelReply();
         
+        weak();
         
         [_deleteImageView setCallback:^{
-            
-            [[Telegram rightViewController].messagesViewController markAsNoWebpage];
+            TGInputMessageTemplate *cpy = weakSelf.inputTemplate;
+            cpy.disabledWebpage = weakSelf.link;
+            [cpy saveForce];
+            [cpy performNotification];
             
         }];
         
@@ -104,10 +108,12 @@
     
     TLWebPage *webpage = notify.userInfo[KEY_WEBPAGE];
     
-    [Storage addWebpage:webpage forLink:_link];
     
     if(_webpage.n_id == webpage.n_id)
     {
+        
+        [Storage addWebpage:webpage forLink:display_url(_link)];
+        
         _webpage = webpage;
         
         [self updateLayout];
@@ -119,8 +125,8 @@
     [_titleField setStringValue:[_webpage isKindOfClass:[TL_webPagePending class]] ? NSLocalizedString(@"Webpage.GettingLinkInfo", nil) : (_webpage.site_name ? _webpage.site_name : @"Link Preview")];
     
     if([_webpage isKindOfClass:[TL_webPageEmpty class]]) {
-        
-        [[Telegram rightViewController].messagesViewController updateWebpage];
+                
+        [_inputTemplate performNotification];
         
         return;
     }
@@ -135,7 +141,10 @@
             desc = _webpage.n_description;
         if(!desc)
             desc = _webpage.author;
-        
+        if(!desc && _webpage.document)
+            desc = NSLocalizedString(@"Document", nil);
+        if(!desc)
+            desc = _webpage.url;
         [_stateField setTextColor:GRAY_TEXT_COLOR];
     }
     
@@ -154,6 +163,7 @@
 }
 
 -(void)dealloc {
+    //assert([NSThread isMainThread]);
     remove_global_dispatcher(_internalId);
     [Notification removeObserver:self];
 }

@@ -10,27 +10,31 @@
 #import "TGAudioPlayer.h"
 
 
-@class MessagetableCellAudioController;
+
+@class MessageTableCellAudioView;
 
 @interface MessageTableItemAudio : MessageTableItem<TGAudioPlayerDelegate>
 
-typedef enum {
-    AudioStateWaitDownloading,
-    AudioStateWaitPlaying,
-    AudioStatePaused,
-    AudioStatePlaying,
-    AudioStateDownloading,
-    AudioStateUploading
-} AudioState;
 
-@property (nonatomic, strong) NSString *duration;
+
+@property (nonatomic, strong) NSAttributedString *duration;
 @property (nonatomic, strong) TGAudioPlayer *player;
-@property (nonatomic) AudioState state;
-@property (nonatomic, weak) MessagetableCellAudioController *cellView;
+@property (nonatomic, assign) int state;
+@property (nonatomic, weak) MessageTableCellAudioView *cellView;
+
+
+-(NSArray *)waveform;
+
+@property (nonatomic,strong) NSAttributedString *nameAttributedString;
+@property (nonatomic,assign) NSSize nameSize;
+
+- (void)tryReadContent;
 
 - (BOOL)isset;
 - (NSString *)path;
 - (int)size;
 - (BOOL)canDownload;
+
+-(NSArray *)emptyWaveform;
 
 @end

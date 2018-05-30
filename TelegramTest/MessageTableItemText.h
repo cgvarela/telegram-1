@@ -9,6 +9,7 @@
 #import "MessageTableItem.h"
 #import "TGCTextMark.h"
 #import "TGWebpageObject.h"
+#import "TGGameObject.h"
 @interface MessageTableItemText : MessageTableItem
 
 @property (nonatomic, strong) NSMutableAttributedString *textAttributed;
@@ -19,14 +20,18 @@
 @property (nonatomic,assign) NSSize textSize;
 
 @property (nonatomic,strong,readonly) TGWebpageObject *webpage;
+@property (nonatomic,strong,readonly) NSArray *links;
+@property (nonatomic,strong,readonly) NSAttributedString *allAttributedLinks;
+@property (nonatomic,assign,readonly) NSSize allAttributedLinksSize;
 
+@property (nonatomic,strong,readonly) TGGameObject *game;
 
 -(void)updateMessageFont;
 
 -(void)updateWebPage;
+-(void)updateEntities;
 
-
--(BOOL)isWebPage;
+-(BOOL)isGame;
 
 
 @end

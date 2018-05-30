@@ -68,7 +68,7 @@
     
     TMTextField *applicationNameTextField = [TMTextField defaultTextField];
     applicationNameTextField.stringValue = NSLocalizedString(@"App.Name", nil);
-    applicationNameTextField.font = [NSFont fontWithName:@"HelveticaNeue-Light" size:28];
+    applicationNameTextField.font = TGSystemLightFont(28);
     applicationNameTextField.textColor = NSColorFromRGB(0x333333);
     [applicationNameTextField sizeToFit];
     applicationNameTextField.wantsLayer = IS_RETINA;
@@ -88,7 +88,7 @@
   //  [applicationInfoAttributedString appendString:@".\n"  withColor:NSColorFromRGB(0x9b9b9b)];
    // [applicationInfoAttributedString appendString:NSLocalizedString(@"Login.Description", nil) withColor:NSColorFromRGB(0x9b9b9b)];
     
-    [applicationInfoAttributedString setFont:[NSFont fontWithName:@"HelveticaNeue" size:13] forRange:applicationInfoAttributedString.range];
+    [applicationInfoAttributedString setFont:TGSystemFont(13) forRange:applicationInfoAttributedString.range];
     
     NSMutableParagraphStyle *applicationInfoParagraphStyle = [[NSMutableParagraphStyle alloc] init];
     [applicationInfoParagraphStyle setLineSpacing:2];
@@ -111,17 +111,17 @@
     [SMSCodeViewContainer addSubview:self.SMSCodeView];
     [self.containerView addSubview:SMSCodeViewContainer];
     
-     weakify();
+     weak();
     
     //COUTRYVIew
     self.countrySelectorView = [[LoginCountrySelectorView alloc] initWithFrame:NSMakeRect(0, offsetY, self.containerView.bounds.size.width, 90)];
     
     [self.countrySelectorView setNextCallback:^{
-        [strongSelf getSMSCode];
+        [weakSelf getSMSCode];
     }];
     
     [self.countrySelectorView setBackCallback:^{
-        [strongSelf performBackEditAnimation:0.08];
+        [weakSelf performBackEditAnimation:0.08];
     }];
     
     [self.containerView addSubview:self.countrySelectorView];
@@ -134,7 +134,7 @@
 //    [self.startMessagingView setBackgroundColor:[NSColor redColor]];
     [self.containerView addSubview:self.startMessagingView];
     [self.startMessagingView.textButton setTapBlock:^{
-        [strongSelf signIn];
+        [weakSelf signIn];
     }];
     
     [self.startMessagingView setHasImage:YES];
@@ -148,7 +148,7 @@
     //    [self.getSMSCodeView setBackgroundColor:[NSColor redColor]];
     [self.getSMSCodeView setButtonText:NSLocalizedString(@"Login.GetCode", nil)];
     [self.getSMSCodeView.textButton setTapBlock:^{
-        [strongSelf getSMSCode];
+        [weakSelf getSMSCode];
     }];
     
     [self.containerView addSubview:self.getSMSCodeView];
@@ -223,7 +223,6 @@
         
         if([error.error_msg isEqualToString:@"SESSION_PASSWORD_NEEDED"]) {
             
-            
             return;
         }
         
@@ -247,7 +246,6 @@
             return;
         }
         
-//        [self.SMSCodeView performBlocking:NO];
         [self.bottomView stopTimer];
 
         
@@ -256,7 +254,7 @@
         r.phone_code_hash = self.phone_code_hash;
         r.phone_code = self.SMSCodeView.code;
         [self.navigationViewController pushViewController:r animated:YES];
-    }];
+    } alwayContinueWithErrorContext:YES];
 }
 
 - (void)setIsPhoneRegistered:(BOOL)isPhoneRegistered {
@@ -281,17 +279,13 @@
     [self.bottomView setHidden:YES];
     [self.startMessagingView setHasImage:NO];
     
-    
+    NSString *version = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+    int current_v = [[NSString stringWithFormat:@"%@%@",[version componentsSeparatedByString:@"."][0],[version componentsSeparatedByString:@"."][1]] intValue];
+    [[NSUserDefaults standardUserDefaults] setInteger:current_v forKey:@"version"];
 }
 
 
 - (void)getSMSCode {
-//    if(!self.countrySelectorView.isValidPhoneNumber) {
-//        [self.getSMSCodeView showErrorWithText:nil];
-//        [self.countrySelectorView performShake];
-//        return;
-//    }
-    
     [self.countrySelectorView performBlocking:YES];
     self.phoneNumber = [self.countrySelectorView phoneNumber];
     [self getSMSCodeSendRequest];
@@ -302,21 +296,9 @@
     [self.countrySelectorView showEditButton:YES];
     
     float duration = 0.08;
-//    float duration = 2;
-//    [self.startMessagingView setButtonText:@"lah"];
-    
+
     [self.getSMSCodeView performTextToBottomWithDuration:duration];
     
-   
-   // [self.bottomView setFrameSize:NSMakeSize(NSWidth(self.SMSCodeView.frame), self.bottomView.isAppCodeSent ? 140 : 80)];
-    
-   // [self.startMessagingView setBackgroundColor:[NSColor orangeColor]];
-    
-  //  [self.startMessagingView setFrameOrigin:NSMakePoint(NSMinX(self.startMessagingView.frame), self.SMSCodeView.isAppCodeSent ? 0 : 40)];
-    
-   /// [self.containerView setCenterByView:self.view];
-    
-    //[self.startMessagingView setFrameOrigin:NSMakePoint(NSMinX(self.startMessagingView.frame), NSMaxY(self.SMSCodeView.frame))];
     
     [self.SMSCodeView setFrameOrigin:NSMakePoint(self.countrySelectorView.frame.origin.x, self.countrySelectorView.frame.origin.y - self.SMSCodeView.frame.size.height + 50)];
     [self.SMSCodeView setHidden:NO];
@@ -372,8 +354,27 @@
     [CATransaction commit];
     
     
-   
+}
+
+
+-(void)proccessSendCodeResponse:(TL_auth_sentCode *)response {
+    [self.bottomView setIsAppCodeSent:[response.type isKindOfClass:[TL_auth_sentCodeTypeApp class]]];
     
+    self.SMSCodeView.code_length = response.type.length;
+    
+    self.bottomView.timeToCall = response.timeout;
+    
+    self.phone_code_hash = response.phone_code_hash;
+    self.isPhoneRegistered = response.isPhone_registered;
+    
+    [self.startMessagingView setHasImage:YES];
+    [self.getSMSCodeView loadingSuccess];
+    
+    if(!self.bottomView.isAppCodeSent) {
+        [self startTimer:self.bottomView.timeToCall];
+    }
+    
+    [self performSMSCodeTextFieldShowAnimation];
     
 }
 
@@ -383,26 +384,14 @@
     self.isCodeExpired = NO;
     
     
-
+    [TMViewController showModalProgress];
     
-    [RPCRequest sendRequest:[TLAPI_auth_sendCode createWithPhone_number:self.phoneNumber sms_type:5 api_id:API_ID api_hash:API_HASH lang_code:@"en"] successHandler:^(RPCRequest *request, TL_auth_sentCode *response) {
+    [RPCRequest sendRequest:[TLAPI_auth_sendCode createWithFlags:0 phone_number:self.phoneNumber current_number:false api_id:API_ID api_hash:API_HASH] successHandler:^(RPCRequest *request, TL_auth_sentCode *response) {
         
         
-        [self.bottomView setIsAppCodeSent:[response isKindOfClass:[TL_auth_sentAppCode class]]];
-            
-        self.bottomView.timeToCall = response.send_call_timeout;
-     
-        self.phone_code_hash = response.phone_code_hash;
-        self.isPhoneRegistered = response.phone_registered;
+        [self proccessSendCodeResponse:response];
         
-        [self.startMessagingView setHasImage:YES];
-        [self.getSMSCodeView loadingSuccess];
-        
-        if(!self.bottomView.isAppCodeSent) {
-            [self startTimer:self.bottomView.timeToCall];
-        }
-        
-        [self performSMSCodeTextFieldShowAnimation];
+        [TMViewController hideModalProgressWithSuccess];
         
     } errorHandler:^(RPCRequest *request, RpcError *error) {
         if(error.error_code == PHONE_MIGRATE_X) {
@@ -412,11 +401,13 @@
                 error.error_msg = NSLocalizedString(@"Login.InvalidPhoneNumber", nil);
             }
             
+             [TMViewController hideModalProgress];
+            
             [self.getSMSCodeView loadingSuccess];
             [self.getSMSCodeView showErrorWithText:error.error_msg];
             [self.countrySelectorView performBlocking:NO];
         }
-    }];
+    } alwayContinueWithErrorContext:YES];
 }
 
 -(void)sendSmsCode {
@@ -424,16 +415,13 @@
     self.bottomView.isAppCodeSent = NO;
     [self startTimer:self.bottomView.timeToCall];
     
-   [RPCRequest sendRequest:[TLAPI_auth_sendSms createWithPhone_number:self.phoneNumber phone_code_hash:self.phone_code_hash] successHandler:^(RPCRequest *request, id response) {
+   [RPCRequest sendRequest:[TLAPI_auth_resendCode createWithPhone_number:self.phoneNumber phone_code_hash:self.phone_code_hash] successHandler:^(RPCRequest *request, TL_auth_sentCode *response) {
        
+       [self proccessSendCodeResponse:response];
        
-       if([response isKindOfClass:[TL_boolTrue class]])
-       {
-           
-       }
    } errorHandler:^(RPCRequest *request, RpcError *error) {
        
-   }];
+   } alwayContinueWithErrorContext:YES];
 }
 
 - (void)startTimer:(int)time {
@@ -538,14 +526,15 @@
 - (void)sendCallRequest {
     
     __block NSString *phone_code_hash = self.phone_code_hash;
-    weakify();
-    [RPCRequest sendRequest:[TLAPI_auth_sendCall createWithPhone_number:self.phoneNumber phone_code_hash:self.phone_code_hash] successHandler:^(RPCRequest *request, id response) {
-        if([strongSelf.phone_code_hash isEqualToString:phone_code_hash])
+    weak();
+    [RPCRequest sendRequest:[TLAPI_auth_resendCode createWithPhone_number:self.phoneNumber phone_code_hash:self.phone_code_hash] successHandler:^(RPCRequest *request, TL_auth_sentCode *response) {
+        if([weakSelf.phone_code_hash isEqualToString:phone_code_hash])
             [self.SMSCodeView changeCallTextFieldString:NSLocalizedString(@"Registration.PhoneDialed", nil)];
+        [self.bottomView startTimer:response.timeout == 0 ? -1 : response.timeout];
     } errorHandler:^(RPCRequest *request, RpcError *error) {
-        if([strongSelf.phone_code_hash isEqualToString:phone_code_hash])
+        if([weakSelf.phone_code_hash isEqualToString:phone_code_hash])
             [self.SMSCodeView changeCallTextFieldString:NSLocalizedString(@"Login.Error", nil)];
-    }];
+    } alwayContinueWithErrorContext:YES];
 }
 
 - (void)textField:(id)textField handleURLClick:(NSString *)url {

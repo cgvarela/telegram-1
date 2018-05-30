@@ -11,6 +11,7 @@
 #import "TLFileLocation+Extensions.h"
 #import "PhotoCollectionImageView.h"
 #import "TGCache.h"
+#import "DownloadQueue.h"
 @implementation PhotoCollectionImageObject
 
 @synthesize supportDownloadListener = _supportDownloadListener;
@@ -48,15 +49,19 @@ static const int width = 180;
     
     [self.downloadListener setCompleteHandler:^(DownloadItem * item) {
         
-        [ASQueue dispatchOnStageQueue:^{
+        [TGImageObject.threadPool addTask:[[SThreadPoolTask alloc] initWithBlock:^(bool (^canceled)()) {
             
-            weakSelf.isLoaded = YES;
+            strongWeak();
             
-            [weakSelf _didDownloadImage:item];
-            weakSelf.downloadItem = nil;
-            weakSelf.downloadListener = nil;
+            if(strongSelf == weakSelf) {
+                weakSelf.isLoaded = YES;
+                
+                [weakSelf _didDownloadImage:item];
+                weakSelf.downloadItem = nil;
+                weakSelf.downloadListener = nil;
+            }
             
-        }];
+        }]];
        
     }];
     
@@ -104,13 +109,17 @@ static const int width = 180;
         
     }
     
+    if(self.imageProcessor) {
+        image = self.imageProcessor(image,image.size);
+    }
+    
     image = decompressedImage(image);
     
     [TGCache cacheImage:image forKey:self.location.cacheKey groups:@[PCCACHE]];
     
     
     
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self.delegate didDownloadImage:image object:self];
     }];
 

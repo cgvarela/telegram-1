@@ -23,6 +23,9 @@ static NSTextField *testTextField() {
     return instance;
 }
 
+
+ NSString *const TGMentionUidAttributeName = @"TGMentionUidAttributeName";
+
 - (NSSize)sizeForTextFieldForWidth:(int)width {
     
     NSTextField *textField = testTextField();
@@ -36,20 +39,55 @@ static NSTextField *testTextField() {
 }
 
 -(NSSize)coreTextSizeForTextFieldForWidth:(int)width {
+    
     CTFramesetterRef framesetter = CTFramesetterCreateWithAttributedString((CFAttributedStringRef) self);
-    
-    
-    
+   
     CGSize textSize = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, CFRangeMake(0,self.length), NULL, CGSizeMake(width, CGFLOAT_MAX), NULL);
+    
     
     textSize.width= ceil(textSize.width);
     textSize.height = ceil(textSize.height);
+    
     
     
     CFRelease(framesetter);
     
     return textSize;
 }
+
+- (NSSize)coreTextSizeOneLineForWidth:(int)width {
+    return [self coreTextSizeOneLineForWidth:width expectType:CoreTextSizeExpectEmojiType];
+}
+
+- (NSSize)coreTextSizeOneLineForWidth:(int)width expectType:(CoreTextSizeExpectType)expectType {
+    
+    
+    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef) self);
+    
+    CGRect bounds = CTLineGetBoundsWithOptions(line, 0);
+    bounds.origin = CGPointZero;
+    bounds.size.width = MIN(ceil(bounds.size.width),width);
+    bounds.size.height = floor(bounds.size.height);
+    
+//    if(expectType & CoreTextSizeExpectEmojiType) {
+//        
+//        CGFloat ascent;
+//        CGFloat descent;
+//        CGFloat leading;
+//        CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+//        
+//       // if(ceil(descent) != 3) {
+//       //     bounds.size.height-=3;
+//       // }
+//        
+//    }
+    
+    CFRelease(line);
+    
+    return bounds.size;
+}
+
+
 
 - (NSSize)coreTextSizeForTextFieldForWidth:(int)width withPaths:(NSArray *)paths {
     
@@ -60,9 +98,6 @@ static NSTextField *testTextField() {
     [paths enumerateObjectsUsingBlock:^(NSValue *obj, NSUInteger idx, BOOL *stop) {
             
         CGPathAddRect(path, NULL, [obj rectValue]);
-        
-        
-            
     }];
 
     
@@ -86,9 +121,12 @@ static NSTextField *testTextField() {
         
         CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
         
-        height+= floor(ascent + ceil(descent) + leading);
+        height+= floor(ascent + floor(descent) + leading);
     }
     
+    CFRelease(framesetter);
+    CFRelease(CTFrame);
+    CFRelease(path);
     
     
     return NSMakeSize(width, height );
@@ -132,7 +170,6 @@ static NSTextField *testTextField() {
         int startSelectLineIndex = [self lineIndex:origins count:(int) CFArrayGetCount(lines) location:startPoint frame:CTFrame frameSize:frameSize];
         
         int currentSelectLineIndex = [self lineIndex:origins count:(int) CFArrayGetCount(lines) location:currentPoint frame:CTFrame frameSize:frameSize];
-        
         
         int dif = abs(startSelectLineIndex - currentSelectLineIndex);
         
@@ -212,10 +249,9 @@ static NSTextField *testTextField() {
     
     CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
     
-    int lineHeight = floor(ascent + ceil(descent) + leading);
+    int lineHeight = ceil(ascent + ceil(descent) + leading);
     
-    
-    return (position.y > linePosition.y) && position.y < (linePosition.y + lineHeight);
+    return (position.y > linePosition.y) && position.y <= (linePosition.y + lineHeight);
 }
 
 
@@ -229,6 +265,8 @@ static NSTextField *testTextField() {
     
     return location.y >= frameSize.height ? 0 : (count -1);
 }
+
+
 
 
 @end

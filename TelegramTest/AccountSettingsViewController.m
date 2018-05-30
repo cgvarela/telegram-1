@@ -12,7 +12,6 @@
 #import "TMMediaUserPictureController.h"
 #import "UserInfoShortButtonView.h"
 #import "UserInfoShortTextEditView.h"
-#import "UserCardViewController.h"
 #import "TLPeer+Extensions.h"
 #import "TGPhotoViewer.h"
 @interface AccountScrollView : NSScrollView
@@ -76,6 +75,7 @@
 @property (nonatomic,strong) UserInfoShortButtonView *privacy;
 @property (nonatomic,strong) UserInfoShortButtonView *blockedUsers;
 @property (nonatomic,strong) UserInfoShortButtonView *generalSettings;
+@property (nonatomic,strong) UserInfoShortButtonView *notificationSettings;
 @property (nonatomic,strong) UserInfoShortButtonView *userName;
 @property (nonatomic,strong) UserInfoShortButtonView *phoneNumber;
 
@@ -93,7 +93,6 @@
 
 
 
-@property (nonatomic,strong) UserCardViewController *userCardViewController;
 
 
 @property (nonatomic,strong) UserInfoShortButtonView *selectedController;
@@ -141,17 +140,23 @@ typedef enum {
     TMView *topContainer = [[TMView alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(self.view.frame) - DIALOG_BORDER_WIDTH, 48)];
     
     topContainer.backgroundColor = [NSColor whiteColor];
+   
+    __weak TMView *top = topContainer;
+    [topContainer setDrawBlock:^{
+        [DIALOG_BORDER_COLOR set];
+        NSRectFill(NSMakeRect(top.frame.size.width - 1, 0, 1, top.frame.size.height));
+    }];
     
     topContainer.autoresizesSubviews = YES;
-    topContainer.autoresizingMask = NSViewWidthSizable;
+   // topContainer.autoresizingMask = NSViewWidthSizable;
     
     
     TMView *separator = [[TMView alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(topContainer.frame), 1)];
     
     [separator setBackgroundColor:DIALOG_BORDER_COLOR];
     
-    separator.autoresizingMask = NSViewHeightSizable | NSViewMinXMargin;
-    
+  //   separator.autoresizingMask = NSViewHeightSizable | NSViewMinXMargin;
+   
     [topContainer addSubview:separator];
     
     
@@ -161,16 +166,17 @@ typedef enum {
     
     [header setStringValue:NSLocalizedString(@"Settings", nil)];
     
-    [header setFont:[NSFont fontWithName:@"HelveticaNeue" size:15]];
+    [header setFont:TGSystemFont(15)];
     [header setTextColor:DARK_BLACK];
     
     [header sizeToFit];
     
-    weakify();
+    weak();
     
     [self.view setDrawBlock:^{
         [header setCenterByView:topContainer];
-        
+        [topContainer setFrameSize:NSMakeSize(weakSelf.view.frame.size.width, topContainer.frame.size.height)];
+        [separator setFrameSize:NSMakeSize(weakSelf.view.frame.size.width, 1)];
     }];
     
     
@@ -178,7 +184,11 @@ typedef enum {
     
     
     [self.editButton setTapBlock:^{
-        [strongSelf enterClick];
+        strongWeak();
+        if(strongSelf == weakSelf) {
+            [strongSelf enterClick];
+        }
+        
     }];
 
     [self.editButton setCenterByView:topContainer];
@@ -194,7 +204,11 @@ typedef enum {
     
     
     [self.cancelEditButton setTapBlock:^{
-        [strongSelf cancel];
+        strongWeak();
+        if(strongSelf != nil) {
+            [strongSelf cancel];
+        }
+        
     }];
     
     [self.cancelEditButton setCenterByView:topContainer];
@@ -225,7 +239,6 @@ typedef enum {
     [self.scrollView setDrawsBackground:YES];
     
   
-    self.userCardViewController = [[UserCardViewController alloc] initWithFrame:NSMakeRect(0, 0, 350, 150)];
     
     FlippedView *container = [[FlippedView alloc] initWithFrame:self.scrollView.bounds];
     
@@ -278,6 +291,7 @@ typedef enum {
      
     [_avatarImageView setTapBlock:^{
         
+
         if(![[UsersManager currentUser].photo isKindOfClass:[TL_userProfilePhotoEmpty class]]) {
             PreviewObject *previewObject = [[PreviewObject alloc] initWithMsdId:[UsersManager currentUser].photo.photo_id media:[TL_photoSize createWithType:@"x" location:[UsersManager currentUser].photo.photo_big w:640 h:640 size:0] peer_id:[UsersManager currentUserId]];
             
@@ -356,7 +370,7 @@ typedef enum {
     self.userNameTextField.attributedStringValue = attr;
     
     
-    attr = [[NSMutableAttributedString alloc] initWithString:[UsersManager currentUser].phoneWithFormat attributes:@{NSFontAttributeName:[NSFont fontWithName:@"HelveticaNeue" size:14]}];
+    attr = [[NSMutableAttributedString alloc] initWithString:[UsersManager currentUser].phoneWithFormat attributes:@{NSFontAttributeName:TGSystemFont(14)}];
     
     [attr addAttribute:NSForegroundColorAttributeName value:self.selectedController == self.phoneNumber ? NSColorFromRGB(0xffffff) : GRAY_TEXT_COLOR range:attr.range];
     self.phoneNumberTextField.attributedStringValue = attr;
@@ -372,6 +386,11 @@ typedef enum {
     
     if([controller isKindOfClass:[GeneralSettingsViewController class]]) {
         [self selectController:self.generalSettings];
+        return;
+    }
+    
+    if([controller isKindOfClass:[NotificationSettingsViewController class]]) {
+        [self selectController:self.notificationSettings];
         return;
     }
     
@@ -496,7 +515,7 @@ typedef enum {
     [self.lastNameView.textView setStringValue:[UsersManager currentUser].last_name];
     
     
-    int height = defaultY + NSHeight(self.defaultView.frame);
+    int height = defaultY + NSHeight(self.defaultView.frame) + 43;
     
     
     [self.topContainer setFrame:NSMakeRect(0, 0, NSWidth(self.view.frame) - DIALOG_BORDER_WIDTH, NSHeight(self.topContainer.frame))];
@@ -522,14 +541,14 @@ typedef enum {
         [self.avatarImageView showUpdateChatPhotoBox];
     }];
     
-   
+    [self.updatePhotoButton setTextColor:BLUE_UI_COLOR];
     
     
     [self.updatePhotoButton setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
     // [self.updatePhotoButton.textButton setAlignment:NSCenterTextAlignment];
-    [self.updatePhotoButton.textButton setFrameSize:NSMakeSize(NSWidth(self.updatePhotoButton.frame), NSHeight(self.updatePhotoButton.textButton.frame))];
-    [self.updatePhotoButton.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.updatePhotoButton.textButton.frame))];
+//    [self.updatePhotoButton.textButton setFrameSize:NSMakeSize(NSWidth(self.updatePhotoButton.frame), NSHeight(self.updatePhotoButton.textButton.frame))];
+//    [self.updatePhotoButton.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.updatePhotoButton.textButton.frame))];
     
     
     [container addSubview:self.updatePhotoButton];
@@ -553,15 +572,39 @@ typedef enum {
     
     [self.generalSettings setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
-    [self.generalSettings.textButton setFrameSize:NSMakeSize(NSWidth(self.generalSettings.frame), NSHeight(self.generalSettings.textButton.frame))];
-    [self.generalSettings.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.generalSettings.textButton.frame))];
+//    [self.generalSettings.textButton setFrameSize:NSMakeSize(NSWidth(self.generalSettings.frame), NSHeight(self.generalSettings.textButton.frame))];
+//    [self.generalSettings.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.generalSettings.textButton.frame))];
     
     
     [container addSubview:self.generalSettings];
     
     
+    currentY+=38;
     
- //   currentY+=38;
+    self.notificationSettings = [UserInfoShortButtonView buttonWithText:NSLocalizedString(@"Notifications",nil) tapBlock:^{
+        
+        if([Telegram rightViewController].navigationViewController.isLocked)
+        {
+            //NSBeep();
+            return;
+        }
+        
+        [[Telegram rightViewController] showNotificationSettingsViewController];
+        
+    }];
+    
+    [self.notificationSettings setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
+    
+//    [self.notificationSettings.textButton setFrameSize:NSMakeSize(NSWidth(self.notificationSettings.frame), NSHeight(self.notificationSettings.textButton.frame))];
+//    [self.notificationSettings.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.notificationSettings.textButton.frame))];
+//    
+    
+    [container addSubview:self.notificationSettings];
+    
+    
+    
+    
+    
     
     self.blockedUsers = [UserInfoShortButtonView buttonWithText:NSLocalizedString(@"Account.BlockedUsers",nil) tapBlock:^{
         
@@ -579,8 +622,8 @@ typedef enum {
     
     [self.blockedUsers setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
-    [self.blockedUsers.textButton setFrameSize:NSMakeSize(NSWidth(self.blockedUsers.frame), NSHeight(self.blockedUsers.textButton.frame))];
-    [self.blockedUsers.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.blockedUsers.textButton.frame))];
+//    [self.blockedUsers.textButton setFrameSize:NSMakeSize(NSWidth(self.blockedUsers.frame), NSHeight(self.blockedUsers.textButton.frame))];
+//    [self.blockedUsers.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.blockedUsers.textButton.frame))];
     
     
   //  [container addSubview:self.blockedUsers];
@@ -609,8 +652,8 @@ typedef enum {
     
     [self.userName addSubview:self.userNameTextField];
    
-    [self.userName.textButton setFrameSize:NSMakeSize(NSWidth(self.userName.frame), NSHeight(self.userName.textButton.frame))];
-    [self.userName.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.userName.textButton.frame))];
+//    [self.userName.textButton setFrameSize:NSMakeSize(NSWidth(self.userName.frame), NSHeight(self.userName.textButton.frame))];
+//    [self.userName.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.userName.textButton.frame))];
     
     
     [container addSubview:self.userName];
@@ -628,8 +671,8 @@ typedef enum {
     
     
     
-    [self.phoneNumber.textButton setFrameSize:NSMakeSize(NSWidth(self.phoneNumber.frame), NSHeight(self.phoneNumber.textButton.frame))];
-    [self.phoneNumber.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.phoneNumber.textButton.frame))];
+//    [self.phoneNumber.textButton setFrameSize:NSMakeSize(NSWidth(self.phoneNumber.frame), NSHeight(self.phoneNumber.textButton.frame))];
+//    [self.phoneNumber.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.phoneNumber.textButton.frame))];
     
     self.phoneNumberTextField = [TMTextField defaultTextField];
     [[self.phoneNumberTextField cell] setTruncatesLastVisibleLine:YES];
@@ -669,9 +712,9 @@ typedef enum {
     
     [self.privacy setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
-    [self.privacy.textButton setFrameSize:NSMakeSize(NSWidth(self.privacy.frame), NSHeight(self.privacy.textButton.frame))];
-    [self.privacy.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.privacy.textButton.frame))];
-    
+//    [self.privacy.textButton setFrameSize:NSMakeSize(NSWidth(self.privacy.frame), NSHeight(self.privacy.textButton.frame))];
+//    [self.privacy.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.privacy.textButton.frame))];
+//    
     
     [container addSubview:self.privacy];
     
@@ -697,8 +740,8 @@ typedef enum {
     
     [self.about setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
-    [self.about.textButton setFrameSize:NSMakeSize(NSWidth(self.about.frame), NSHeight(self.about.textButton.frame))];
-    [self.about.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.about.textButton.frame))];
+//    [self.about.textButton setFrameSize:NSMakeSize(NSWidth(self.about.frame), NSHeight(self.about.textButton.frame))];
+//    [self.about.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.about.textButton.frame))];
     
     
     
@@ -714,8 +757,8 @@ typedef enum {
     
     [self.faq setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
-    [self.faq.textButton setFrameSize:NSMakeSize(NSWidth(self.faq.frame), NSHeight(self.faq.textButton.frame))];
-    [self.faq.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.faq.textButton.frame))];
+//    [self.faq.textButton setFrameSize:NSMakeSize(NSWidth(self.faq.frame), NSHeight(self.faq.textButton.frame))];
+//    [self.faq.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.faq.textButton.frame))];
     
     
     
@@ -746,7 +789,8 @@ typedef enum {
                 [dialog save];
             }
             
-            [[Telegram rightViewController] showByDialog:dialog sender:self];
+            [appWindow().navigationController showMessagesViewController:dialog];
+            
         };
         
         
@@ -777,18 +821,20 @@ typedef enum {
     
     [self.askQuestion setFrame:NSMakeRect(0, currentY, NSWidth(self.view.frame) - 0, 38)];
     
-    [self.askQuestion.textButton setFrameSize:NSMakeSize(NSWidth(self.askQuestion.frame), NSHeight(self.askQuestion.textButton.frame))];
-    [self.askQuestion.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.askQuestion.textButton.frame))];
+//    [self.askQuestion.textButton setFrameSize:NSMakeSize(NSWidth(self.askQuestion.frame), NSHeight(self.askQuestion.textButton.frame))];
+//    [self.askQuestion.textButton setFrameOrigin:NSMakePoint(20, NSMinY(self.askQuestion.textButton.frame))];
     
     
     
     [container addSubview:self.askQuestion];
     
     
-    self.phoneNumber.autoresizingMask = self.phoneNumber.textButton.autoresizingMask = self.privacy.autoresizingMask = self.privacy.textButton.autoresizingMask = self.askQuestion.autoresizingMask = self.faq.autoresizingMask = self.about.autoresizingMask = self.blockedUsers.autoresizingMask = self.blockedUsers.textButton.autoresizingMask = self.updatePhotoButton.autoresizingMask = self.updatePhotoButton.textButton.autoresizingMask = self.nameTextField.autoresizingMask = NSViewWidthSizable;
+//    self.notificationSettings.autoresizingMask = self.phoneNumber.autoresizingMask = self.phoneNumber.textButton.autoresizingMask = self.privacy.autoresizingMask = self.privacy.textButton.autoresizingMask = self.askQuestion.autoresizingMask = self.faq.autoresizingMask = self.about.autoresizingMask = self.blockedUsers.autoresizingMask = self.blockedUsers.textButton.autoresizingMask = self.updatePhotoButton.autoresizingMask = self.updatePhotoButton.text.autoresizingMask = self.nameTextField.autoresizingMask = NSViewWidthSizable;
     
     
-    self.phoneNumber.textButton.textColor = self.privacy.textButton.textColor = self.askQuestion.textButton.textColor = self.faq.textButton.textColor = self.about.textButton.textColor = self.blockedUsers.textButton.textColor = self.userName.textButton.textColor = self.generalSettings.textButton.textColor = DARK_BLACK;
+    
+    
+    self.notificationSettings.textColor = self.phoneNumber.textColor = self.privacy.textColor = self.askQuestion.textColor = self.faq.textColor = self.about.textColor = self.blockedUsers.textColor = self.userName.textColor = self.generalSettings.textColor = TEXT_COLOR;
     
     [container setAutoresizingMask:NSViewWidthSizable];
     
@@ -803,6 +849,8 @@ typedef enum {
     self.askQuestion.rightContainer = imageViewWithImage(image_ArrowGrey());
     self.privacy.rightContainer = imageViewWithImage(image_ArrowGrey());
     self.phoneNumber.rightContainer = imageViewWithImage(image_ArrowGrey());
+    self.notificationSettings.rightContainer = imageViewWithImage(image_ArrowGrey());
+    
     
     self.userName.rightContainerOffset = NSMakePoint(-10, 0);
     self.blockedUsers.rightContainerOffset = NSMakePoint(-10, 0);
@@ -812,6 +860,7 @@ typedef enum {
     self.askQuestion.rightContainerOffset = NSMakePoint(-10, 0);
     self.privacy.rightContainerOffset = NSMakePoint(-10, 0);
     self.phoneNumber.rightContainerOffset = NSMakePoint(-10, 0);
+    self.notificationSettings.rightContainerOffset = NSMakePoint(-10, 0);
     
     [self.userName setSelectedColor:BLUE_COLOR_SELECT];
     [self.blockedUsers setSelectedColor:BLUE_COLOR_SELECT];
@@ -821,19 +870,19 @@ typedef enum {
     [self.askQuestion setSelectedColor:BLUE_COLOR_SELECT];
     [self.privacy setSelectedColor:BLUE_COLOR_SELECT];
     [self.phoneNumber setSelectedColor:BLUE_COLOR_SELECT];
-    
+    [self.notificationSettings setSelectedColor:BLUE_COLOR_SELECT];
     return container;
 }
 
 -(void)selectController:(UserInfoShortButtonView *)selectController {
     
     if(self.selectedController != selectController) {
-        [self.selectedController.textButton setTextColor:DARK_BLACK];
+        [self.selectedController setTextColor:DARK_BLACK];
         self.selectedController.rightContainer = imageViewWithImage(image_ArrowGrey());
         self.selectedController.isSelected = NO;
         
         
-        [selectController.textButton setTextColor:[NSColor whiteColor]];
+        [selectController setTextColor:[NSColor whiteColor]];
         selectController.rightContainer = imageViewWithImage(image_ArrowWhite());
         selectController.isSelected = YES;
         
@@ -899,8 +948,8 @@ typedef enum {
     [self.lastNameView.textView setTarget:self];
     [self.lastNameView.textView setAction:@selector(enterClick)];
     
-    [self.firstNameView.textView setFont:[NSFont fontWithName:@"HelveticaNeue" size:14]];
-    [self.lastNameView.textView setFont:[NSFont fontWithName:@"HelveticaNeue" size:14]];
+    [self.firstNameView.textView setFont:TGSystemFont(14)];
+    [self.lastNameView.textView setFont:TGSystemFont(14)];
     
     [self.firstNameView.textView setAlignment:NSLeftTextAlignment];
     [self.lastNameView.textView setAlignment:NSLeftTextAlignment];

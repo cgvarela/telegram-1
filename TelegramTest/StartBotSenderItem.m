@@ -24,7 +24,7 @@
         _startParam = startParam;
         _bot = bot;
         
-        self.message = [MessageSender createOutMessage:message media:[TL_messageMediaEmpty create] conversation:conversation];
+        self.message = [MessageSender createOutMessage:message media:[TL_messageMediaEmpty create] conversation:conversation additionFlags:0];
         
         [self.message save:YES];
         
@@ -41,31 +41,41 @@
 
 -(void)performRequest {
     
-    id request = [TLAPI_messages_startBot createWithBot:_bot.inputUser chat_id:self.conversation.peer.chat_id random_id:self.message.randomId start_param:_startParam];
+    id request = [TLAPI_messages_startBot createWithBot:_bot.inputUser peer:self.conversation.inputPeer random_id:self.message.randomId start_param:_startParam];
+    
+    weak();
     
     self.rpc_request = [RPCRequest sendRequest:request successHandler:^(RPCRequest *request, TLUpdates * response) {
         
-        if(response.updates.count < 2)
-        {
-            [self cancel];
-            return;
+        strongWeak();
+        
+        if(strongSelf != nil) {
+            [strongSelf updateMessageId:response];
+            
+            TL_localMessage *msg = [TL_localMessage convertReceivedMessage:[[strongSelf updateNewMessageWithUpdates:response] message]];
+            
+            if(msg == nil)
+            {
+                [strongSelf cancel];
+                return;
+            }
+            
+            strongSelf.message.n_id = msg.n_id;
+            strongSelf.message.date = msg.date;
+            strongSelf.message.media = msg.media;
+            
+            strongSelf.message.dstate = DeliveryStateNormal;
+            
+            [strongSelf.message save:YES];
+            
+            strongSelf.state = MessageSendingStateSent;
         }
         
-        TL_localMessage *msg = [TL_localMessage convertReceivedMessage:(TLMessage *) ( [response.updates[1] message])];
         
-        self.message.n_id = msg.n_id;
-        self.message.date = msg.date;
-        self.message.media = msg.media;
-            
-        self.message.dstate = DeliveryStateNormal;
-        
-        [self.message save:YES];
-        
-        self.state = MessageSendingStateSent;
         
         
     } errorHandler:^(RPCRequest *request, RpcError *error) {
-        self.state = MessageSendingStateError;
+        weakSelf.state = MessageSendingStateError;
     }];
     
 }

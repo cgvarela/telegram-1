@@ -76,7 +76,25 @@
         multiplyFactor++;
     }
     
-    return [NSString stringWithFormat:@"%4.0f %@", convertedValue, [tokens objectAtIndex:multiplyFactor]];
+    if(multiplyFactor == 0) {
+        convertedValue = 1.0f;
+    }
+    
+    multiplyFactor = MAX(1,multiplyFactor);
+    
+    if((ceil(convertedValue)  - convertedValue) != 0) {
+        return [NSString stringWithFormat:@"%.2f %@", convertedValue , [tokens objectAtIndex:multiplyFactor]];
+    }else {
+        return [NSString stringWithFormat:@"%.0f %@", convertedValue , [tokens objectAtIndex:multiplyFactor]];
+    }
+    
+}
+
+- (NSString *)stringByDecodingURLFormat
+{
+    NSString *result = [(NSString *)self stringByReplacingOccurrencesOfString:@"+" withString:@" "];
+    result = [result stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+    return result;
 }
 
 + (NSString *) md5String:(NSString *)string {

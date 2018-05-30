@@ -51,6 +51,21 @@ void setMaxBroadcastUsers(int max_broadcast_users);
 int maxBroadcastUsers();
 int maxChatUsers();
 
+int rating_e_decay();
+void set_rating_e_decay(int c);
+
+void setMegagroupSizeMax(int b);
+int megagroupSizeMax();
+
+void set_edit_time_limit(int limit);
+int edit_time_limit();
+
+void set_stickers_recent_limit(int limit);
+int stickers_recent_limit();
+
+int chat_pin_limit();
+void set_chat_pin_limit(int limit);
+
 @property (nonatomic) BOOL isWindowActive;
 @property (nonatomic, assign) BOOL isOnline;
 
@@ -58,21 +73,20 @@ int maxChatUsers();
 - (void)setAccountOffline:(BOOL)force;
 
 
-- (void)showMessagesFromDialog:(TLDialog *)dialog sender:(id)sender;
-- (void)showUserInfoWithUserId:(int)userID conversation:(TL_conversation *)conversaion sender:(id)sender;
-- (void)showMessagesWidthUser:(TLUser *)user sender:(id)sender;
 - (void)showNotSelectedDialog;
 
 
 +(void)showEnterPasswordPanel;
 
 +(BOOL)isSingleLayout;
-
++(BOOL)isTripleLayout;
 +(TGEnterPasswordPanel *)enterPasswordPanel;
 
 +(void)initializeDatabase;
 
 +(void)sendLogs;
+
++(id)findObjectWithName:(NSString *)name;
 
 
 +(void)saveHashTags:(NSString *)message peer_id:(int)peer_id;

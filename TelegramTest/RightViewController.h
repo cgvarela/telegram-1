@@ -8,11 +8,8 @@
 
 #import <Cocoa/Cocoa.h>
 #import "MessagesViewController.h"
-#import "UserInfoViewController.h"
-#import "ChatInfoViewController.h"
 #import "TMCollectionPageController.h"
 #import "HistoryFilter.h"
-#import "BroadcastInfoViewController.h"
 #import "ComposeAction.h"
 #import "ComposePickerViewController.h"
 #import "ComposeChatCreateViewController.h"
@@ -20,10 +17,8 @@
 #import "EncryptedKeyViewController.h"
 #import "BlockedUsersViewController.h"
 #import "GeneralSettingsViewController.h"
-#import "SettingsSecurityViewController.h"
 #import "AboutViewController.h"
 #import "UserNameViewController.h"
-#import "AddContactViewController.h"
 #import "PrivacyViewController.h"
 #import "PrivacySettingsViewController.h"
 #import "PrivacyUserListController.h"
@@ -42,6 +37,11 @@
 #import "TGSplitViewController.h"
 #import "CacheSettingsViewController.h"
 #import "NotificationSettingsViewController.h"
+#import "ComposeCreateChannelViewController.h"
+#import "ComposeCreateChannelUserNameStepViewController.h"
+#import "ComposeConfirmModeratorViewController.h"
+#import "ComposeManagmentViewController.h"
+#import "ComposeChannelParticipantsViewController.h"
 @class MainViewController;
 @class LeftViewController;
 
@@ -53,9 +53,6 @@
 
 
 @property (nonatomic, strong) MessagesViewController *messagesViewController;
-@property (nonatomic, strong) UserInfoViewController *userInfoViewController;
-@property (nonatomic, strong) ChatInfoViewController *chatInfoViewController;
-@property (nonatomic, strong) BroadcastInfoViewController *broadcastInfoViewController;
 @property (nonatomic, strong) TMCollectionPageController *collectionViewController;
 @property (nonatomic, strong) ComposePickerViewController *composePickerViewController;
 @property (nonatomic, strong) ComposeChatCreateViewController *composeChatCreateViewController;
@@ -63,10 +60,8 @@
 @property (nonatomic, strong) EncryptedKeyViewController *encryptedKeyViewController;
 @property (nonatomic, strong) BlockedUsersViewController *blockedUsersViewController;
 @property (nonatomic, strong) GeneralSettingsViewController *generalSettingsViewController;
-@property (nonatomic, strong) SettingsSecurityViewController *settingsSecurityViewController;
 @property (nonatomic, strong) AboutViewController *aboutViewController;
 @property (nonatomic, strong) UserNameViewController *userNameViewController;
-@property (nonatomic, strong) AddContactViewController *addContactViewController;
 @property (nonatomic, strong) PrivacyViewController *privacyViewController;
 @property (nonatomic, strong) PrivacySettingsViewController *lastSeenViewController;
 @property (nonatomic, strong) PrivacyUserListController *privacyUserListController;
@@ -75,19 +70,19 @@
 @property (nonatomic, strong) PhoneChangeConfirmController *phoneChangeConfirmController;
 @property (nonatomic, strong) TGOpacityViewController *opacityViewController;
 @property (nonatomic, strong) TGPasscodeSettingsViewController *passcodeViewController;
-
 @property (nonatomic, strong) TGSessionsViewController *sessionsViewContoller;
 @property (nonatomic, strong) TGPasswosdMainViewController *passwordMainViewController;
 @property (nonatomic, strong) TGPasswordSetViewController *passwordSetViewController;
-
-
 @property (nonatomic, strong) ChatExportLinkViewController *chatExportLinkViewController;
 @property (nonatomic, strong) TGStickersSettingsViewController *stickersSettingsViewController;
-
 @property (nonatomic, strong) ComposeChooseGroupViewController *composeChooseGroupViewController;
-
 @property (nonatomic, strong) CacheSettingsViewController *cacheSettingsViewController;
 @property (nonatomic, strong) NotificationSettingsViewController *notificationSettingsViewController;
+@property (nonatomic, strong) ComposeCreateChannelViewController *composeCreateChannelViewController;
+@property (nonatomic, strong) ComposeCreateChannelUserNameStepViewController *composeCreateChannelUserNameStepViewController;
+@property (nonatomic, strong) ComposeConfirmModeratorViewController *composeConfirmModeratorViewController;
+@property (nonatomic,strong) ComposeManagmentViewController *composeManagmentViewController;
+@property (nonatomic,strong) ComposeChannelParticipantsViewController *composeChannelParticipantsViewController;
 
 - (void)modalViewSendAction:(id)object;
 - (BOOL)isModalViewActive;
@@ -97,31 +92,25 @@
 
 - (void)showShareContactModalView:(TLUser *)user;
 - (void)showForwardMessagesModalView:(TL_conversation *)dialog messagesCount:(NSUInteger)messagesCount;
+- (void)showInlineBotSwitchModalView:(TLUser *)user query:(NSString *)query;
+- (void)showShareLinkModalView:(NSString *)url text:(NSString *)text;
+- (void)showGameForwardView:(NSDictionary *)params;
 
-- (void)showByDialog:(TL_conversation *)dialog sender:(id)sender;
-
-- (BOOL)showByDialog:(TL_conversation *)dialog withJump:(int)messageId historyFilter:(Class)filter sender:(id)sender;
 
 - (void)showComposeWithAction:(ComposeAction *)composeAction;
 - (void)showComposeCreateChat:(ComposeAction *)composeAction;
 - (void)showComposeBroadcastList:(ComposeAction *)composeAction;
 - (void)showComposeAddUserToGroup:(ComposeAction *)composeAction;
-- (void)showUserInfoPage:(TLUser *)user conversation:(TL_conversation *)conversation;
-- (void)showUserInfoPage:(TLUser *)user;
-- (void)showCollectionPage:(TL_conversation *)conversation;
-- (void)showChatInfoPage:(TLChat *)chat;
-- (void)showBroadcastInfoPage:(TL_broadcast *)broadcast;
 - (void)showNotSelectedDialog;
 
 -(void)showEncryptedKeyWindow:(TL_encryptedChat *)chat;
 
 - (void)showBlockedUsers;
 - (void)showGeneralSettings;
-- (void)showSecuritySettings;
 - (void)showAbout;
 - (void)showUserNameController;
+- (void)showUserNameControllerWithChannel:(TL_channel *)channel completionHandler:(dispatch_block_t)completionHandler;
 
-- (void)showAddContactController;
 - (void)showPrivacyController;
 - (void)showLastSeenController;
 
@@ -150,4 +139,19 @@
 
 -(void)showCacheSettingsViewController;
 -(void)showNotificationSettingsViewController;
+
+-(void)showComposeCreateChannel:(ComposeAction *)action;
+
+-(void)showChannelInfoPage:(TLChat *)chat;
+
+-(void)showComposeChangeUserName:(ComposeAction *)action;
+
+-(void)showComposeAddModerator:(ComposeAction *)action;
+-(void)showComposeManagment:(ComposeAction *)action;
+
+
+-(void)showComposeChannelParticipants:(ComposeAction *)action;
+
+
+- (void)showChatInviteController;
 @end

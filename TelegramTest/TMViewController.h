@@ -9,8 +9,9 @@
 #import <Cocoa/Cocoa.h>
 #import "TMView.h"
 #import "TMTextField.h"
-
-
+#import "TMNavigationBar.h"
+#import "RBLPopover.h"
+@class MessagesViewController;
 @class TGAttachObject;
 @class TMPopover;
 @class TMNavigationController;
@@ -21,16 +22,22 @@
 @property (nonatomic, strong) TMView *centerNavigationBarView;
 @property (nonatomic, strong) TMView *rightNavigationBarView;
 
+@property (nonatomic,assign) BOOL isDisclosureController;
+
 @property (nonatomic, strong) TMPopover *popover;
 
 @property (nonatomic,strong,readonly) TMTextField *centerTextField;
 
 @property (nonatomic, strong) TMNavigationController *navigationViewController;
+@property (nonatomic,strong,readonly) TMNavigationBar *navigationBarView;
+
 @property (nonatomic) BOOL isNavigationBarHidden;
 
 - (id)initWithFrame:(NSRect)frame;
 - (TMView *)view;
 - (void)setHidden:(BOOL)isHidden;
+
+-(TMNavigationController *)rightNavigationController;
 
 
 
@@ -39,10 +46,12 @@
 
 - (void)rightButtonAction;
 
-
++(void)showModalProgressWithDescription:(NSString *)description;
 +(void)showModalProgress;
 +(void)hideModalProgress;
 
+
+-(void)showModalProgressWithWindow:(NSWindow *)window;
 
 -(void)showModalProgress;
 -(void)hideModalProgress;
@@ -68,6 +77,8 @@
 +(void)showBlockPasslock:(passlockCallback)callback;
 -(void)showBlockPasslock:(passlockCallback)callback;
 
++(void)closeAllModals;
+
 +(POPBasicAnimation *)popAnimationForProgress:(float)from to:(float)to;
 
 +(void)showAttachmentCaption:(NSArray *)attachments onClose:(dispatch_block_t)onClose;
@@ -76,13 +87,17 @@
 +(BOOL)isModalActive;
 +(NSArray *)modalsView;
 
++(void)hideAllModals;
+
 +(TMView *)modalView;
++(void)becomeFirstResponderToModalView;
 
 +(void)becomePasslock;
 
 -(void)_didStackRemoved;
 
 -(BOOL)becomeFirstResponder;
+-(BOOL)resignFirstResponder;
 - (void)loadViewIfNeeded;
 - (void)loadView;
 - (void)viewWillAppear:(BOOL)animated;
@@ -93,8 +108,19 @@
 
 -(TMView *)standartLeftBarView;
 
+-(TMView *)standartRightBarView;
+
+-(BOOL)proccessEnterAction;
+-(BOOL)proccessEscAction;
+
 -(void)setCenterBarViewText:(NSString *)text;
 -(void)setCenterBarViewTextAttributed:(NSAttributedString *)text;
+
+-(MessagesViewController *)messagesViewController;
+
+-(void)becomeFirstResponder:(BOOL)force;
+
+-(void)addSubview:(NSView *)subview;
 
 
 @end

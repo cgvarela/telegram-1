@@ -63,6 +63,8 @@ static long h_r_l;
 }
 
 
+
+
 @end
 
 
@@ -155,7 +157,7 @@ static long h_r_l;
     }];
 
     
-    if(!NSContainsRect([self.tableView visibleRect], [self.tableView rectOfRow:selectedIdx]))
+    if(![self.tableView rowIsVisible:selectedIdx])
         [self.tableView.scrollView.clipView scrollPoint:[self.tableView rectOfRow:selectedIdx].origin];
 }
 
@@ -178,32 +180,43 @@ static long h_r_l;
     
 }
 - (BOOL)selectionWillChange:(NSInteger)row item:(TMRowItem *) item {
-    
-    
     return YES;
 }
 - (BOOL)isSelectable:(NSInteger)row item:(TMRowItem *) item {
-
-    
     return row > 0;
 }
 
 
--(void)setConversation:(TL_conversation *)conversation {
-    _conversation = conversation;
-    
- 
-    
+-(void)setController:(TGAudioGlobalController *)controller {
+    _controller = controller;
     [self reload];
+
+}
+
+-(TL_conversation *)conversation {
+    return _controller.conversation;
 }
 
 
 -(void)reload {
     
-    if(_conversation) {
+    if(_controller) {
         _list = @[];
+        [_tableView removeAllItems:YES];
         _fullItems = [[NSMutableArray alloc] init];
-        _h_controller = [[ChatHistoryController alloc] initWithController:self historyFilter:[MP3HistoryFilter class]];
+       
+        _h_controller = [[ChatHistoryController alloc] initWithController:self historyFilter:_filterClass];
+        
+        if(_controller.currentItem) {
+            [_h_controller addMessageWithoutSavingState:_controller.currentItem.message];
+            _list = @[_controller.currentItem];
+            
+            TGAudioRowItem *item = [[TGAudioRowItem alloc] initWithObject:_controller.currentItem];
+            [item performLoadImageObject];
+
+            [_fullItems addObject:item];
+        }
+        
         [_searchRow.searchField setStringValue:@""];
         [_tableView insert:[[TGAudioSearchRowItem alloc] init] atIndex:0 tableRedraw:YES];
         
@@ -212,6 +225,7 @@ static long h_r_l;
         [_tableView removeAllItems:YES];
         _fullItems = nil;
         _list = nil;
+        _h_controller = nil;
     }
     
     [self check];
@@ -220,10 +234,17 @@ static long h_r_l;
 
 -(void)loadNext {
     
-    if(_h_controller.nextState != ChatHistoryStateFull) {
-        [_h_controller request:YES anotherSource:YES sync:NO selectHandler:^(NSArray *result, NSRange range) {
+    if((_h_controller.nextState != ChatHistoryStateFull && !_controller.isReversed) || (_h_controller.prevState != ChatHistoryStateFull && _controller.isReversed)) {
+        [_h_controller request:!_controller.isReversed anotherSource:YES sync:NO selectHandler:^(NSArray *result, NSRange range, id controller) {
             
-            NSArray *f = [result filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.class == %@",[MessageTableItemAudioDocument class]]];
+            [result enumerateObjectsUsingBlock:^(MessageTableItem *obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                
+                [Notification perform:UPDATE_MESSAGE_ITEM data:@{KEY_MESSAGE_ID:@(obj.message.n_id),KEY_PEER_ID:@(obj.message.peer_id)}];
+                
+            }];
+            
+            
+           NSArray *f = [result filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.class == %@ OR self.class == %@",[MessageTableItemAudioDocument class],[MessageTableItemAudio class]]];
             
             _list = [_list arrayByAddingObjectsFromArray:f];
             
@@ -232,7 +253,7 @@ static long h_r_l;
             [f enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
                 
                 TGAudioRowItem *item = [[TGAudioRowItem alloc] initWithObject:obj];
-                
+                [item performLoadImageObject];
                 item.isSelected = [item hash] == _selectedId;
                 
                 [convert addObject:item];
@@ -244,14 +265,19 @@ static long h_r_l;
             
             [self resort];
             
-            [_tableView removeItemsInRange:NSMakeRange(1, _tableView.count-1) tableRedraw:YES];
+            if(_tableView.count > 0) {
+                 [_tableView removeItemsInRange:NSMakeRange(1, _tableView.count-1) tableRedraw:YES];
+            }
             
             [_tableView insert:_fullItems startIndex:1 tableRedraw:YES];
             
             [self check];
             
-            if([TGAudioPlayerWindow currentItem] == nil && _tableView.count > 1) {
-                [self selectNext];
+            if(_controller.currentItem == nil && _tableView.count > 1 &&  _controller.autoStart) {
+                if(!_controller.isReversed)
+                    [self selectNext];
+                else
+                    [self selectPrev];
             }
             
             [self loadNext];
@@ -314,7 +340,9 @@ static long h_r_l;
     
     [self.tableView redrawAll];
     
-    if(NSContainsRect([self.tableView visibleRect], [self.tableView rectOfRow:selectedIdx]))
+    
+    
+    if(![self.tableView rowIsVisible:selectedIdx])
         [self.tableView.scrollView.clipView scrollPoint:[self.tableView rectOfRow:selectedIdx].origin];
 
 }
@@ -323,38 +351,66 @@ static long h_r_l;
     [_tableView redrawAll];
 }
 
+-(void)close {
+    [_h_controller drop:YES];
+    _h_controller = nil;
+    _controller = nil;
+}
+
 -(void)selectNext {
-    long rowId = (long) [_tableView indexOfItem:[_tableView itemByHash:_selectedId]];
     
-    if(rowId == NSNotFound)
-    {
-        rowId = 0;
-    }
+    [ASQueue dispatchOnMainQueue:^{
+        long rowId = (long) [_tableView indexOfItem:[_tableView itemByHash:_selectedId]];
+        
+        if(rowId == NSNotFound)
+        {
+            rowId = 0;
+        }
+        
+        rowId++;
+        
+        if(rowId == _tableView.count ) {
+            rowId = 1;
+           
+            if(_controller.isReversed) {
+                [_controller hide];
+                
+                return;
+            }
+        }
+        
+        _changedAudio([(TGAudioRowItem *)[_tableView itemAtPosition:rowId] document]);
+    }];
     
-    rowId++;
-    
-    if(rowId == _tableView.count ) {
-        rowId = 1;
-    }
-    
-    _changedAudio([(TGAudioRowItem *)[_tableView itemAtPosition:rowId] document]);
+   
     
 }
 -(void)selectPrev {
-    long rowId = (long) [_tableView indexOfItem:[_tableView itemByHash:_selectedId]];
+    [ASQueue dispatchOnMainQueue:^{
+        long rowId = (long) [_tableView indexOfItem:[_tableView itemByHash:_selectedId]];
+        
+        if(rowId == NSNotFound)
+        {
+            rowId = 0;
+        }
+        
+        rowId--;
+        
+        if(rowId < 1) {
+            rowId = (int)_tableView.count - 1;
+        }
+        
+        _changedAudio([(TGAudioRowItem *)[_tableView itemAtPosition:rowId] document]);
+    }];
+}
+
+-(NSImage *)getAlbumImageFromItem:(MessageTableItemAudioDocument *)item {
+    TGAudioRowItem *rowItem  =(TGAudioRowItem *) [_tableView itemByHash:item.message.randomId];
     
-    if(rowId == NSNotFound)
-    {
-        rowId = 0;
-    }
+    NSImage *image = [TGCache cachedImage:rowItem.imageObject.cacheKey];
     
-    rowId--;
     
-    if(rowId < 1) {
-        rowId = (int)_tableView.count - 1;
-    }
-    
-    _changedAudio([(TGAudioRowItem *)[_tableView itemAtPosition:rowId] document]);
+    return image;
 }
 
 -(void)receivedMessage:(MessageTableItem *)message position:(int)position itsSelf:(BOOL)force {
@@ -399,7 +455,9 @@ static long h_r_l;
     return [_fullItems indexOfObject:item];
 }
 
--(void)deleteMessages:(NSArray *)ids {
+-(void)deleteItems:(NSArray *)dItems orMessageIds:(NSArray *)ids {
+    
+    
     NSArray *items = [_fullItems filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self.document.message.n_id IN (%@)",ids]];
     
     [items enumerateObjectsUsingBlock:^(TGAudioRowItem *obj, NSUInteger idx, BOOL *stop) {
@@ -433,14 +491,17 @@ static long h_r_l;
 
 
 -(NSArray *)messageTableItemsFromMessages:(NSArray *)messages {
-    NSMutableArray *array = [NSMutableArray array];
-    for(TLMessage *message in messages) {
-        MessageTableItem *item = [MessageTableItem messageItemFromObject:message];
-        if(item) {
-            [array insertObject:item atIndex:0];
-        }
-    }
-    return array;
+    
+    NSMutableArray *items = [NSMutableArray array];
+    
+    [messages enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        
+        [items insertObject:[[MessageTableItemAudioDocument alloc] initWithObject:obj] atIndex:0];
+        
+        
+    }];
+    
+    return items;
 }
 
 
@@ -461,7 +522,6 @@ static long h_r_l;
                 
             }]];
         }
-        
         
         [_tableView removeItemsInRange:NSMakeRange(1, _tableView.list.count - 1) tableRedraw:YES];
         

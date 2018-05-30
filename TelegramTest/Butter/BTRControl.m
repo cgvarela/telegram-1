@@ -349,6 +349,12 @@ static void BTRControlCommonInit(BTRControl *self) {
 	[super updateTrackingAreas];
 }
 
+-(BOOL)mouseInside {
+    NSPoint mouseLocation = [[self window] mouseLocationOutsideOfEventStream];
+    mouseLocation = [self convertPoint:mouseLocation fromView:nil];
+    return NSPointInRect(mouseLocation, self.bounds);
+}
+
 - (void)setNeedsTrackingArea:(BOOL)needsTrackingArea {
 	_needsTrackingArea = needsTrackingArea;
 	if (!needsTrackingArea && self.trackingArea != nil) {
@@ -450,21 +456,29 @@ static void BTRControlCommonInit(BTRControl *self) {
     
     cancel_delayed_block(_internalId);
     
+    weak();
+    
     _internalId = perform_block_after_delay(0.4,  ^{
         
-        if(self.mouseInside && self.mouseDown) {
-            
-            BTRControlEvents events = BTRControlEventLongLeftClick;
-            [self sendActionsForControlEvents:events];
-            
-            
-            for (BTRControlAction *action in self.actions) {
-                if (action.events & events) {
-                    _lastDownTime = 1;
-                    break;
+        strongWeak();
+        
+        if(strongSelf != nil) {
+            if(strongSelf.mouseInside && strongSelf.mouseDown) {
+                
+                BTRControlEvents events = BTRControlEventLongLeftClick;
+                [strongSelf sendActionsForControlEvents:events];
+                
+                
+                for (BTRControlAction *action in strongSelf.actions) {
+                    if (action.events & events) {
+                        _lastDownTime = 1;
+                        break;
+                    }
                 }
             }
         }
+        
+        
     });
     
 	[self sendActionsForControlEvents:events];
@@ -478,8 +492,8 @@ static void BTRControlCommonInit(BTRControl *self) {
     
     cancel_delayed_block(_internalId);
     
-    if(_lastDownTime == 1)
-        return;
+//    if(_lastDownTime == 1)
+//        return;
     
     _lastDownTime = 0;
     
@@ -498,12 +512,10 @@ static void BTRControlCommonInit(BTRControl *self) {
 	} else {
 		events |= BTRControlEventMouseUpOutside;
 	}
+   
+    self.highlighted = NO;
     
-    
-	
-	[self sendActionsForControlEvents:events];
-	
-	self.highlighted = NO;
+    [self sendActionsForControlEvents:events];
 }
 
 - (void)sendActionsForControlEvents:(BTRControlEvents)events {
@@ -516,7 +528,7 @@ static void BTRControlCommonInit(BTRControl *self) {
             if (action.events & events) {
                 if (action.block != nil) {
                     action.block(events);
-                } else if (action.action != nil) { // the target can be nil
+                } else if (action.target != nil && action.action != nil) { // the target can not be nil
                     [NSApp sendAction:action.action to:action.target from:self];
                 }
             }

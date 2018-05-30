@@ -7,7 +7,7 @@
 //
 
 #import "SearchLoadMoreCell.h"
-
+#import "SearchLoadMoreItem.h"
 @interface SearchLoadMoreCell()
 @property (nonatomic, strong) TMTextButton *loadMore;
 @end
@@ -17,17 +17,17 @@
 - (id)initWithFrame:(NSRect)frameRect {
     self = [super initWithFrame:frameRect];
     
-    weakify();
+    weak();
     
     
     self.loadMore = [[TMTextButton alloc] init];
     [self.loadMore setTextColor:BLUE_UI_COLOR];
     [self.loadMore setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin];
-    [self.loadMore setFont:[NSFont fontWithName:@"HelveticaNeue" size:13]];
+    [self.loadMore setFont:TGSystemFont(13)];
     [self.loadMore setTapBlock:^{
-        SearchLoadMoreItem *item = (SearchLoadMoreItem *)[strongSelf rowItem];
-        if(item.clickBlock)
-            item.clickBlock();
+        SearchLoadMoreItem *item = (SearchLoadMoreItem *)[weakSelf rowItem];
+        if(item.callback)
+            item.callback(item);
     }];
     [self addSubview:self.loadMore];
     return self;
@@ -42,7 +42,7 @@
     
     SearchLoadMoreItem *item = (SearchLoadMoreItem *)[self rowItem];
     
-    NSString *text = [NSString stringWithFormat:NSLocalizedString(@"Search.More", nil), item.num ];
+    NSString *text = [NSString stringWithFormat:NSLocalizedString(@"Search.More", nil), item.items.count ];
     
     [self.loadMore setStringValue:text];
     [self.loadMore sizeToFit];

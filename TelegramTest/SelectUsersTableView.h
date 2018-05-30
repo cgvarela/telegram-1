@@ -13,7 +13,9 @@
 
 typedef enum {
     SelectTableTypeUser,
-    SelectTableTypeChats
+    SelectTableTypeChats,
+    SelectTableTypeCommon,
+    SelectTableConversations
 } SelectTableType ;
 
 @protocol SelectTableDelegate <NSObject>
@@ -25,15 +27,26 @@ typedef enum {
 
 @interface SelectUsersTableView : TMTableView<TMTableViewDelegate>
 
+typedef enum {
+    SelectTableViewSelectAlignmentLeft,
+    SelectTableViewSelectAlignmentRight
+} SelectTableViewSelectAlignment;
+
+//content
+@property (nonatomic,assign) int searchHeight; // default = 50;
+@property (nonatomic,assign) SelectTableViewSelectAlignment selectTableViewSelectAlignment;
 
 @property (nonatomic,strong) NSArray *exceptions;
 
-@property (nonatomic,strong) id <SelectTableDelegate> selectDelegate;
+@property (nonatomic,weak) id <SelectTableDelegate> selectDelegate;
 
 @property (nonatomic,copy) void (^multipleCallback)(NSArray *contacts);
 
 
 @property (nonatomic,strong) NSArray *selectedItems;
+
+-(void)addItems:(NSArray *)items;
+-(void)removeSelectedItems;
 
 @property (nonatomic,assign) NSUInteger selectLimit;
 
@@ -43,6 +56,11 @@ typedef enum {
 
 - (void)readyContacts;
 - (void)readyChats;
+
+- (void)readyConversations;
+
+//SelectUserItems;
+- (void)readyCommon:(NSArray *)items;
 
 - (void)search:(NSString *)searchString;
 

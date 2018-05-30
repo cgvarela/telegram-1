@@ -11,10 +11,13 @@
 #import "TMElements.h"
 #import "MessagesViewController.h"
 
-@interface MessageTableCell : NSView
+@interface MessageTableCell : TMView
 
-@property (nonatomic, strong) MessageTableItem *item;
-@property (nonatomic, strong) MessagesViewController *messagesViewController;
+@property (nonatomic, weak) MessageTableItem *item;
+@property (nonatomic, weak) MessagesViewController *messagesViewController;
+
+@property (nonatomic,readonly) BOOL isSelected;
+@property (nonatomic,readonly) BOOL isEditable;
 
 - (void)setHover:(BOOL)isHover redraw:(BOOL)redraw;
 - (void)setItem:(MessageTableItem *)item;
@@ -24,5 +27,16 @@
 
 -(void)clearSelection;
 -(BOOL)mouseInText:(NSEvent *)theEvent;
+
+-(void)addScrollEvent;
+-(void)removeScrollEvent;
+
+- (void)searchSelection;
+- (void)stopSearchSelection;
+
+-(void)_didScrolledTableView:(NSNotification *)notification;
+
+-(void)setSelected:(BOOL)selected animated:(BOOL)animated;
+
 
 @end

@@ -7,17 +7,17 @@
 //
 
 #import "ContactsViewController.h"
-#import "SearchTableCell.h"
-#import "SearchItem.h"
 #import "SearchSeparatorItem.h"
 
 #import "SelectUserItem.h"
 #import "SelectUserRowView.h"
-#import "NewConversationViewController.h"
 #import "RBLPopover.h"
 #import "TLPeer+Extensions.h"
-#import "AddContactViewController.h"
 #import "TGConversationsTableView.h"
+#import "TGContactSelfUserItem.h"
+#import "TGSettingsTableView.h"
+#import "SearchSeparatorItem.h"
+#import "TGAddContactModalView.h"
 @interface ContactFirstItem : TMRowItem
 
 @end
@@ -27,6 +27,14 @@
 
 -(NSUInteger)hash {
     return 0;
+}
+
+-(int)height {
+    return 40;
+}
+
+-(Class)viewClass {
+    return NSClassFromString(@"ContactFirstView");
 }
 
 @end
@@ -43,15 +51,15 @@
         self.field = [TMTextField defaultTextField];
         
         [self.field setBackgroundColor:[NSColor clearColor]];
-        [self.field setFont:[NSFont fontWithName:@"HelveticaNeue-Medium" size:12]];
+        [self.field setFont:TGSystemFont(13)];
         [[self.field cell] setLineBreakMode:NSLineBreakByCharWrapping];
         [[self.field cell] setTruncatesLastVisibleLine:YES];
         
-        [self.field setStringValue:NSLocalizedString(@"User.AddToContacts", nil)];
+        [self.field setStringValue:NSLocalizedString(@"NewConversation.AddContact", nil)];
         
         [self.field sizeToFit];
         
-        [self.field setTextColor:BLUE_UI_COLOR];
+        [self.field setTextColor:LINK_COLOR];
         
         [self.field setFrameOrigin:NSMakePoint(55, 13)];
         
@@ -70,20 +78,15 @@
 }
 
 -(void)checkSelected:(BOOL)isSelected {
-    self.imageView.image = isSelected ? image_ContactsAddContactActive() : image_ContactsAddContact();
-    [self.field setTextColor:isSelected ? NSColorFromRGB(0xffffff) : GRAY_TEXT_COLOR];
+   // self.imageView.image = isSelected ? image_ContactsAddContactActive() : image_ContactsAddContact();
+   // [self.field setTextColor:isSelected ? NSColorFromRGB(0xffffff) : LINK_COLOR];
 }
 
 -(void)drawRect:(NSRect)dirtyRect {
 	
-   if(self.isSelected) {
-        [BLUE_COLOR_SELECT setFill];
-        NSRectFill(NSMakeRect(0, 0, self.bounds.size.width, self.bounds.size.height));
-    } else {
-        [LIGHT_GRAY_BORDER_COLOR setFill];
-        
-        NSRectFill(NSMakeRect(55, 0, NSWidth(self.frame) - 55 , 1));
-    }
+    [LIGHT_GRAY_BORDER_COLOR setFill];
+    
+    NSRectFill(NSMakeRect(55, 0, NSWidth(self.frame) - 55 , 1));
 
 
 }
@@ -104,15 +107,20 @@
 -(id)initWithObject:(id)object {
     if(self = [super initWithObject:object]) {
         
-        self.noSelectTitlePoint = NSMakePoint(55, 26);
-        self.noSelectLastSeenPoint = NSMakePoint(55, 8);
-        self.noSelectAvatarPoint = NSMakePoint(11, roundf( (50 - 36) / 2));
-        
-        self.rightBorderMargin = 16;
         
     }
     
     return self;
+}
+
+-(int)height {
+    return 50;
+}
+
+
+
+-(Class)viewClass {
+    return NSClassFromString(@"ContactUserView");
 }
 
 @end
@@ -138,11 +146,6 @@
     return YES;
 }
 
--(void)checkSelected:(BOOL)isSelected
-{
-    [self.titleTextField setSelected:isSelected];
-    [self.lastSeenTextField setSelected:isSelected];
-}
 
 
 -(NSColor *)color
@@ -150,18 +153,6 @@
     return _color != nil ? _color : NSColorFromRGB(0xffffff);
 }
 
-//-(void)mouseDown:(NSEvent *)theEvent {
-//    [super mouseDown:theEvent];
-//    
-//    self.color = NSColorFromRGB(0xfafafa);
-//    
-//    [self setNeedsDisplay:YES];
-//
-//    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-//        self.color = NSColorFromRGB(0xffffff);
-//        [self setNeedsDisplay:YES];
-//    });
-//}
 
 
 -(void)redrawRow {
@@ -172,22 +163,24 @@
     return (ContactUserItem *) [super rowItem];
 }
 
+
+-(void)checkSelected:(BOOL)isSelected
+{
+    [self.titleTextField setSelected:isSelected];
+    [self.lastSeenTextField setSelected:isSelected];
+}
+
+
 -(void)drawRect:(NSRect)dirtyRect {
     
-    NSPoint point = [self rowItem].noSelectTitlePoint;
-    
+
     if(self.isSelected) {
         [BLUE_COLOR_SELECT setFill];
         NSRectFill(NSMakeRect(0, 0, self.bounds.size.width, self.bounds.size.height));
     } else {
-        [LIGHT_GRAY_BORDER_COLOR setFill];
-        
-        NSRectFill(NSMakeRect(point.x+2, 0, NSWidth(self.frame) - point.x, 1));
+        [super drawRect:dirtyRect];
     }
-	
-   
-
-    
+	 
 }
 
 @end
@@ -201,8 +194,6 @@
 @property (nonatomic,strong) ContactFirstItem *firstItem;
 @property (nonatomic,strong) ContactFirstView *firstView;
 
-@property (nonatomic,strong) AddContactViewController *addContactViewController;
-
 @end
 
 @implementation ContactsViewController
@@ -213,12 +204,8 @@
     
     int topOffset = 48;
     
-    self.searchViewController.type = SearchTypeContacts | SearchTypeGlobalUsers | SearchTypeDialogs;
-    
-    self.addContactViewController = [[AddContactViewController alloc] initWithFrame:NSMakeRect(0, 0, 300, 200)];
-    
-    self.addContactViewController.rbl = [[RBLPopover alloc] initWithContentViewController:self.addContactViewController];
-    self.addContactViewController.rbl.canBecomeKey = YES;
+    self.searchViewController.type = TGModernSearchTypeDialogs | TGModernSearchTypeGlobalUsers;
+
     
     self.tableView = [[TGConversationsTableView alloc] initWithFrame:NSMakeRect(0, 0, NSWidth(self.view.frame), NSHeight(self.view.frame) - topOffset)];
     self.tableView.tm_delegate = self;
@@ -243,6 +230,20 @@
 -(void)onContactsSortChanged:(NSNotification *)notification {
     [self.tableView.list sortUsingComparator:^NSComparisonResult(ContactUserItem *obj1, ContactUserItem *obj2) {
         
+        if([obj1 isKindOfClass:[TGContactSelfUserItem class]]) {
+            return NSOrderedAscending;
+        } else if([obj2 isKindOfClass:[TGContactSelfUserItem class]]) {
+            return NSOrderedDescending;
+        }
+        
+        if([obj1 isKindOfClass:[SearchSeparatorItem class]]) {
+            return NSOrderedAscending;
+        } else if([obj2 isKindOfClass:[SearchSeparatorItem class]]) {
+            return NSOrderedDescending;
+        }
+        
+        
+        
         if([obj1 isKindOfClass:[ContactFirstItem class]] )
         {
             return NSOrderedAscending;
@@ -250,6 +251,7 @@
         {
             return NSOrderedDescending;
         }
+        
         
         NSComparisonResult result = [@(obj1.user.lastSeenTime) compare:@(obj2.user.lastSeenTime)];
         
@@ -265,34 +267,27 @@
 }
 
 -(void)willChangedController:(TMViewController *)controller {
-    if([controller isKindOfClass:[AddContactViewController class]]) {
-        [self.tableView setSelectedByHash:0];
+    __block BOOL ret = NO;
+    
+    [[Telegram rightViewController].navigationViewController.viewControllerStack enumerateObjectsUsingBlock:^(TMViewController *obj, NSUInteger idx, BOOL *stop) {
         
-        return;
-        
-    } else {
-        
-        __block BOOL ret = NO;
-        
-        [[Telegram rightViewController].navigationViewController.viewControllerStack enumerateObjectsUsingBlock:^(TMViewController *obj, NSUInteger idx, BOOL *stop) {
-            
-            if([obj isKindOfClass:[MessagesViewController class]]) {
-                MessagesViewController *messagesController = (MessagesViewController *)obj;
-                if(messagesController.conversation.type == DialogTypeUser) {
-                    [self.tableView setSelectedByHash:messagesController.conversation.peer.peer_id];
-                    
-                    *stop = YES;
-                    ret = YES;
-                }
+        if([obj isKindOfClass:[MessagesViewController class]]) {
+            MessagesViewController *messagesController = (MessagesViewController *)obj;
+            if(messagesController.conversation.type == DialogTypeUser) {
+                [self.tableView setSelectedByHash:messagesController.conversation.peer.peer_id];
+                
+                *stop = YES;
+                ret = YES;
             }
-            
-            
-            
-        }];
+        }
         
-        if(ret)
-            return;
-    }
+        
+        
+    }];
+    
+    if(ret)
+        return;
+    
     
     [self.tableView cancelSelection];
 }
@@ -327,7 +322,10 @@
     
     [self.tableView reloadData];
     
-    [self.tableView insert:self.firstItem atIndex:0 tableRedraw:NO];
+    
+    [self.tableView addItem:[[TGContactSelfUserItem alloc] initWithObject:[UsersManager currentUser]] tableRedraw:NO];
+    [self.tableView addItem:[[SearchSeparatorItem alloc] initWithOneName:NSLocalizedString(@"Search.Separator.Contacts", nil) pluralName:nil] tableRedraw:NO];
+    [self.tableView addItem:self.firstItem tableRedraw:NO];
     
     [self.tableView reloadData];
     
@@ -387,7 +385,7 @@
 
 
 - (CGFloat) rowHeight:(NSUInteger)row item:(TMRowItem *)item {
-    return [item isKindOfClass:[ContactUserItem class]] ? 50 : 40;
+    return item.height;
 }
 
 - (BOOL) isGroupRow:(NSUInteger)row item:(TMRowItem *) item {
@@ -396,13 +394,7 @@
 
 - (NSView *)viewForRow:(NSUInteger)row item:(TMRowItem *)item {
     
-    if([item isKindOfClass:[ContactUserItem class]]) {
-        return [self.tableView cacheViewForClass:[ContactUserView class] identifier:@"contactItem" withSize:NSMakeSize(NSWidth(self.tableView.frame), 50)];
-    }else if([item isKindOfClass:[ContactFirstItem class]]) {
-        return [self.tableView cacheViewForClass:[ContactFirstView class] identifier:@"firstContactItem"];
-    }
-    
-    return nil;
+    return  [self.tableView cacheViewForClass:[item viewClass] identifier:NSStringFromClass([item viewClass]) withSize:NSMakeSize(NSWidth(_tableView.frame), item.height)];
 }
 
 
@@ -421,6 +413,10 @@
         [[Telegram rightViewController] modalViewSendAction:item.user.dialog];
         return NO;
     }
+    
+    if(row == 0 && [[Telegram rightViewController] isModalViewActive]) {
+        [[Telegram rightViewController] modalViewSendAction:[UsersManager currentUser].dialog];
+    }
     return ![Telegram rightViewController].navigationViewController.isLocked;
 }
 
@@ -428,10 +424,17 @@
     
     if([item isKindOfClass:[ContactUserItem class]]) {
          ContactUserItem *searchItem = (ContactUserItem *) item;
-        [[Telegram sharedInstance] showMessagesWidthUser:searchItem.user sender:self];
+        
+        [appWindow().navigationController showMessagesViewController:searchItem.user.dialog];
+        
     } else if([item isKindOfClass:[ContactFirstItem class]]) {
         
-        [[Telegram rightViewController] showAddContactController];
+        TGAddContactModalView *modalView = [[TGAddContactModalView alloc] init];
+        
+        [modalView show:self.view.window animated:YES];
+
+    } else if([item isKindOfClass:[TGContactSelfUserItem class]]) {
+        [appWindow().navigationController showMessagesViewController:[UsersManager currentUser].dialog];
 
     }
    

@@ -9,8 +9,9 @@
 #import "TGStickerImageObject.h"
 #import "DownloadStickerItem.h"
 #import "webp/decode.h"
+#import "DownloadQueue.h"
 @interface TGStickerImageObject ()
-@property (nonatomic,strong) TL_localMessage *message;
+@property (nonatomic,strong) TLDocument *document;
 @end
 
 
@@ -19,9 +20,9 @@
 @synthesize placeholder = _placeholder;
 @synthesize supportDownloadListener = _supportDownloadListener;
 
--(id)initWithMessage:(TL_localMessage *)message placeholder:(NSImage *)placeholder {
+-(id)initWithDocument:(TLDocument *)document placeholder:(NSImage *)placeholder {
     if(self = [super init]) {
-        self.message = message;
+        _document = document;
         _placeholder = placeholder;
     }
     
@@ -36,7 +37,7 @@
         return;//[_downloadItem cancel];
     
     
-    self.downloadItem = [[DownloadStickerItem alloc] initWithObject:self.message];
+    self.downloadItem = [[DownloadStickerItem alloc] initWithObject:_document];
     
     self.downloadListener = [[DownloadEventListener alloc] init];
     
@@ -51,11 +52,21 @@
     
     [self.downloadListener setCompleteHandler:^(DownloadItem * item) {
         
-        weakSelf.isLoaded = YES;
-        
-        [weakSelf _didDownloadImage:item];
-        weakSelf.downloadItem = nil;
-        weakSelf.downloadListener = nil;
+        [TGImageObject.threadPool addTask:[[SThreadPoolTask alloc] initWithBlock:^(bool (^canceled)()) {
+            
+            strongWeak();
+            @try {
+                if(strongSelf == weakSelf) {
+                    weakSelf.isLoaded = YES;
+                    [weakSelf _didDownloadImage:item];
+                    weakSelf.downloadItem = nil;
+                    weakSelf.downloadListener = nil;
+                }
+            } @catch (NSException *exception) {
+                
+            }
+        }]];
+          
     }];
     
     
@@ -86,7 +97,7 @@
     }
    
     
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self.delegate didDownloadImage:image object:self];
     }];
 }
@@ -97,7 +108,7 @@
 }
 
 -(NSString *)cacheKey {
-    return [NSString stringWithFormat:@"s:%ld",self.message.media.document.n_id];
+    return [NSString stringWithFormat:@"s:%ld",_document.n_id];
 }
 
 @end

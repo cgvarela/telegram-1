@@ -8,36 +8,42 @@
 
 #import <Cocoa/Cocoa.h>
 #import "MessageTableItemAudioDocument.h"
-
-typedef enum {
-    TGAudioPlayerStatePlaying = 0,
-    TGAudioPlayerStatePaused = 1,
-    TGAudioPlayerStateForcePaused = 2
-} TGAudioPlayerState;
-
-@protocol TGAudioPlayerWindowDelegate <NSObject>
-
--(void)playerDidChangedState:(MessageTableItemAudioDocument *)item playerState:(TGAudioPlayerState)state;
-
-@end
+#import "TGMessagesNavigationController.h"
+#import "TGAudioGlobalController.h"
 
 
 @interface TGAudioPlayerWindow : NSPanel
 
-@property (nonatomic,strong,readonly) MessageTableItemAudioDocument *currentItem;
 
-+(void)show:(TL_conversation *)conversation;
+
+
+-(MessageTableItemAudioDocument *)currentItem;
+
+@property (nonatomic,weak,readonly) TMNavigationController *navigationController;
+
++(void)show:(TL_conversation *)conversation navigation:(TMNavigationController *)navigation;
++(void)show:(TL_conversation *)conversation playerState:(TGAudioPlayerGlobalStyle)state navigation:(TMNavigationController *)navigation;
++(void)showWithController:(TGAudioGlobalController *)controller;
 +(void)hide;
-+(MessageTableItemAudioDocument *)currentItem;
+
++(TGAudioGlobalController *)controller;
+
+//+(MessageTableItemAudioDocument *)currentItem;
 
 +(void)setCurrentItem:(MessageTableItemAudioDocument *)audioItem;
 
-+(TGAudioPlayerState)playerState;
++(TGAudioPlayerGlobalState)playerState;
 
 +(void)pause;
 +(void)resume;
++(void)nextTrack;
++(void)prevTrack;
 
-+(void)addEventListener:(id<TGAudioPlayerWindowDelegate>)delegate;
-+(void)removeEventListener:(id<TGAudioPlayerWindowDelegate>)delegate;
++(BOOL)isShown;
+
++(BOOL)autoStart;
+
++(void)addEventListener:(id<TGAudioPlayerGlobalDelegate>)delegate;
++(void)removeEventListener:(id<TGAudioPlayerGlobalDelegate>)delegate;
 
 @end

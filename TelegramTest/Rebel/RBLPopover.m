@@ -133,6 +133,7 @@
 
 - (void)dealloc {
 	[self.popoverWindow close];
+
 }
 
 #pragma mark -
@@ -176,6 +177,7 @@
         }
     });
 }
+
 
 - (BOOL)isMouseInPopover {
     NSPoint globalLocation = [ NSEvent mouseLocation ];
@@ -323,7 +325,7 @@
             
             
             if (shouldClose) {
-                id mouseDownView = [((AppDelegate *)[NSApp delegate]).window.contentView hitTest:event.locationInWindow];
+                id mouseDownView = [self.popoverWindow.parentWindow.contentView hitTest:event.locationInWindow];
                 if(mouseDownView != self.positioningView) {
                     [strongSelf close];
                 }
@@ -458,9 +460,11 @@
 		[self.popoverWindow.parentWindow removeChildWindow:self.popoverWindow];
 		[self.popoverWindow close];
 		
-		if (self.didCloseBlock != nil) self.didCloseBlock(self);
 		
 		self.contentViewController.view.frame = CGRectMake(self.contentViewController.view.frame.origin.x, self.contentViewController.view.frame.origin.y, self.originalViewSize.width, self.originalViewSize.height);
+        
+        if (self.didCloseBlock != nil) self.didCloseBlock(self);
+
 	};
 	
 	if (self.animates) {
@@ -553,6 +557,7 @@ static CGFloat const RBLPopoverBackgroundViewArrowWidth = 24.0;
 + (instancetype)backgroundViewForContentSize:(CGSize)contentSize popoverEdge:(CGRectEdge)popoverEdge originScreenRect:(CGRect)originScreenRect {
 	CGSize size = [self sizeForBackgroundViewWithContentSize:contentSize popoverEdge:popoverEdge];
 	RBLPopoverBackgroundView *returnView = [[self.class alloc] initWithFrame:NSMakeRect(0.0, 0.0, size.width, size.height) popoverEdge:popoverEdge originScreenRect:originScreenRect];
+
 	return returnView;
 }
 

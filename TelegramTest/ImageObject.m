@@ -8,6 +8,10 @@
 
 #import "ImageObject.h"
 
+@interface ImageObject ()
+@property (nonatomic,assign) long randomId;
+@end
+
 @implementation ImageObject
 
 
@@ -36,9 +40,21 @@
 -(id)initWithLocation:(TLFileLocation *)location placeHolder:(NSImage *)placeHolder sourceId:(int)sourceId size:(int)size {
     if(self = [super init]) {
         _location = location;
+        
+        _randomId = rand_long();
+        
         if([placeHolder isKindOfClass:[NSImage class]])
             _placeholder = placeHolder;
         _sourceId = sourceId;
+        _size = size;
+    }
+    return self;
+}
+
+-(id)initWithLocation:(TLFileLocation *)location thumbData:(NSData *)thumbData size:(int)size  {
+    if(self = [super init]) {
+        _location = location;
+        _thumbData = thumbData;
         _size = size;
     }
     return self;
@@ -51,9 +67,7 @@
 -(void)_didDownloadImage:(DownloadItem *)item {
     NSImage *image = [[NSImage alloc] initWithData:item.result];
     
-    
-    
-    [[ASQueue mainQueue] dispatchOnQueue:^{
+    [ASQueue dispatchOnMainQueue:^{
         [self.delegate didDownloadImage:image object:self];
     }];
 }
@@ -65,7 +79,7 @@
 }
 
 -(NSString *)cacheKey {
-    return self.location.cacheKey;
+    return self.location ? self.location.cacheKey : [NSString stringWithFormat:@"%ld",_randomId];
 }
 
 @end
